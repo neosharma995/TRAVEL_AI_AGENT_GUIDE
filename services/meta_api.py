@@ -3,7 +3,6 @@
 import requests
 import logging
 from datetime import datetime
-
 logger = logging.getLogger(__name__)
 def get_whatsapp_number_metadata(phone_number_id, access_token):
     """
