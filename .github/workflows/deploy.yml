@@ -2,8 +2,8 @@ name: Build, Push and Deploy
 
 on:
   push:
-    branches: [ prod ]  # Only deploy from prod branch
-  workflow_dispatch:    # Manual trigger option
+    branches: [ prod ]
+  workflow_dispatch:
 
 env:
   DOCKER_IMAGE: neosharma995/travel-ai-agent-bot
@@ -50,12 +50,25 @@ jobs:
         script: |
           cd /home/ubuntu/TRAVEL_AI_AGENT_GUIDE
           
-          # Backup current .env if exists
-          if [ -f .env ]; then
-            cp .env .env.backup.$(date +%Y%m%d_%H%M%S)
-          fi
+          # Stop containers but keep volumes and networks
+          echo "🛑 Stopping containers..."
+          docker-compose down --remove-orphans
           
-          # Create fresh .env file
+          # Remove ALL stopped containers
+          echo "🧹 Cleaning up stopped containers..."
+          docker container prune -f
+          
+          # Remove unused images (but keep volumes and networks)
+          echo "🗑️ Removing unused images..."
+          docker image prune -af
+          
+          # Completely remove old .env file
+          echo "📝 Removing old .env file..."
+          rm -f .env
+          rm -f .env.backup.*
+          
+          # Create BRAND NEW .env file
+          echo "✨ Creating fresh .env file with latest secrets..."
           cat > .env << 'EOF'
           # API Keys
           OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
@@ -74,7 +87,7 @@ jobs:
           # MongoDB
           MONGODB_USER=${{ secrets.MONGODB_USER }}
           MONGODB_PASS=${{ secrets.MONGODB_PASS }}
-          MONGODB_HOST=mongodb  # Use service name if in docker-compose
+          MONGODB_HOST=mongodb
           MONGODB_PORT=27017
           
           # Email
@@ -89,34 +102,36 @@ jobs:
           PORT=${{ secrets.PORT || 5000 }}
           EOF
           
-          # Stop and remove old containers and volumes (optional: remove volumes if needed)
-          docker-compose down --remove-orphans
+          # Ensure .env has correct permissions
+          chmod 600 .env
           
-          # Remove old container completely (ensures fresh start)
-          docker container prune -f
-          
-          # Pull the latest image
+          # Pull the absolute latest image
+          echo "🐳 Pulling latest Docker image..."
           docker-compose pull
           
-          # Start fresh containers (remove old volumes if you want fresh DB)
-          # Use --force-recreate to ensure new containers
-          docker-compose up -d --force-recreate
+          # Start fresh containers (keeps existing volumes and networks)
+          echo "🚀 Starting fresh containers..."
+          docker-compose up -d --force-recreate --remove-orphans
           
-          # Remove unused images
-          docker image prune -f
+          # Wait for containers to initialize
+          echo "⏳ Waiting 10 seconds for services to start..."
+          sleep 10
           
           # Show running containers
+          echo "📋 Running containers:"
           docker-compose ps
           
-          # Check logs for errors
-          docker-compose logs --tail=50
+          # Show recent logs
+          echo "📝 Recent logs:"
+          docker-compose logs --tail=30
           
-          # Health check (optional)
-          sleep 10
+          # Health check
+          echo "🏥 Performing health check..."
           if curl -f http://localhost:${{ secrets.PORT || 5000 }}/health; then
-            echo "✅ Application started successfully"
+            echo "✅ Deployment successful!"
           else
-            echo "⚠️ Application might have issues, check logs above"
+            echo "⚠️ Health check failed, checking logs..."
+            docker-compose logs --tail=50
           fi
           
-          echo "Deployment completed at $(date)"
+          echo "✅ Deployment completed at $(date)"
