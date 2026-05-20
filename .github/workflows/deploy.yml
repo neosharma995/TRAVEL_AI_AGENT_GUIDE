@@ -48,8 +48,6 @@ jobs:
         port: ${{ secrets.VPS_PORT || 22 }}
         script: |
           cd /home/ubuntu/TRAVEL_AI_AGENT_GUIDE
-
-          # Write .env file (no indentation inside heredoc)
           cat > .env << EOF
 OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
 ACCESS_TOKEN=${{ secrets.ACCESS_TOKEN }}
@@ -67,16 +65,9 @@ ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}
 FROM_EMAIL=${{ secrets.FROM_EMAIL }}
 PORT=${{ secrets.PORT }}
 EOF
-
-          # Pull latest image
           docker-compose pull
-
-          # Force recreate container with new .env and image
+          docker-compose down
           docker-compose up -d --force-recreate --remove-orphans
-
-          # Clean up old images
           docker image prune -f
-
-          # Check status
           docker-compose ps
           echo "Deployment completed at $(date)"
