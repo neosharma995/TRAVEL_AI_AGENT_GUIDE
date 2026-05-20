@@ -1,7 +1,7 @@
 name: Build, Push and Deploy
 on:
   push:
-    branches: [ main, master ]
+    branches: [ prod ]
   workflow_dispatch:
 
 env:
@@ -48,50 +48,35 @@ jobs:
         port: ${{ secrets.VPS_PORT || 22 }}
         script: |
           cd /home/ubuntu/TRAVEL_AI_AGENT_GUIDE
-          
-          # Create .env file with all environment variables
+
+          # Write .env file (no indentation inside heredoc)
           cat > .env << EOF
-          # API Keys
-          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          
-          # WhatsApp/Meta
-          ACCESS_TOKEN=${{ secrets.ACCESS_TOKEN }}
-          VERIFY_TOKEN=${{ secrets.VERIFY_TOKEN }}
-          
-          # WordPress API
-          WP_API_BASE=${{ secrets.WP_API_BASE }}
-          
-          # Flask/Debug
-          SECRET_KEY=${{ secrets.SECRET_KEY }}
-          DEBUG_MODE=${{ secrets.DEBUG_MODE }}
-          
-          # MongoDB
-          MONGODB_USER=${{ secrets.MONGODB_USER }}
-          MONGODB_PASS=${{ secrets.MONGODB_PASS }}
-          
-          # Email
-          SMTP_HOST=${{ secrets.SMTP_HOST }}
-          SMTP_PORT=${{ secrets.SMTP_PORT }}
-          SMTP_USER=${{ secrets.SMTP_USER }}
-          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
-          ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}
-          FROM_EMAIL=${{ secrets.FROM_EMAIL }}
-          
-          # Port
-          PORT=${{ secrets.PORT }}
-          
-          
-          EOF
-          
+OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+ACCESS_TOKEN=${{ secrets.ACCESS_TOKEN }}
+VERIFY_TOKEN=${{ secrets.VERIFY_TOKEN }}
+WP_API_BASE=${{ secrets.WP_API_BASE }}
+SECRET_KEY=${{ secrets.SECRET_KEY }}
+DEBUG_MODE=${{ secrets.DEBUG_MODE }}
+MONGODB_USER=${{ secrets.MONGODB_USER }}
+MONGODB_PASS=${{ secrets.MONGODB_PASS }}
+SMTP_HOST=${{ secrets.SMTP_HOST }}
+SMTP_PORT=${{ secrets.SMTP_PORT }}
+SMTP_USER=${{ secrets.SMTP_USER }}
+SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}
+FROM_EMAIL=${{ secrets.FROM_EMAIL }}
+PORT=${{ secrets.PORT }}
+EOF
+
           # Pull latest image
           docker-compose pull
-          
-          # Recreate container
-          docker-compose down
-          docker-compose up -d
-          
+
+          # Force recreate container with new .env and image
+          docker-compose up -d --force-recreate --remove-orphans
+
+          # Clean up old images
           docker image prune -f
-          
+
           # Check status
           docker-compose ps
           echo "Deployment completed at $(date)"
