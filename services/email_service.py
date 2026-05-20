@@ -12,7 +12,6 @@ SMTP_PORT     = int(os.getenv('SMTP_PORT', 587))
 SMTP_USER     = os.getenv('SMTP_USER', '')
 SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
 FROM_EMAIL    = os.getenv('FROM_EMAIL', '') or SMTP_USER
-# Fallback only — real email comes from API response user.email via bot.py
 ADMIN_EMAIL   = os.getenv('ADMIN_EMAIL', '')
 
 
