@@ -1,0 +1,65 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  whatsapp-bot:
+    build: .
+    container_name: whatsapp-bot
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      # API Keys
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      
+      # WhatsApp/Meta
+      - ACCESS_TOKEN=${ACCESS_TOKEN}
+      - VERIFY_TOKEN=${VERIFY_TOKEN}
+      
+      # WordPress API
+      - WP_API_BASE=${WP_API_BASE}
+      
+      # Flask/Debug
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG_MODE=${DEBUG_MODE}
+      
+      # MongoDB (optional)
+      - MONGODB_USER=${MONGODB_USER}
+      - MONGODB_PASS=${MONGODB_PASS}
+      
+      # Email
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - FROM_EMAIL=${FROM_EMAIL}
+      
+      # Port
+      - PORT=${PORT:-5000}
+      
+      # Webhook URL
+      - VERIFY_WEB_HOOK=${VERIFY_WEB_HOOK}
+    
+    env_file:
+      - .env
+    
+    command: python webhook.py
+    
+    volumes:
+      - ./generated_pdfs:/app/generated_pdfs
+      - ./logs:/app/logs
+    
+    networks:
+      - bot-network
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  bot-network:
+    driver: bridge

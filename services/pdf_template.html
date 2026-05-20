@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{package_name}} - Travel Package</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Montserrat:wght@300;400;500;600;700;800;900&family=Dancing+Script:wght@400;600;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        body {
+            font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #2a2a2a;
+            line-height: 1.5;
+        }
+
+        /* ─────────────────────────────────────────
+           PDF PAGE SHELL
+        ───────────────────────────────────────── */
+        .pdf-page {
+            width: 210mm;
+            height: 297mm;
+            max-height: 297mm;
+            margin: 0 auto 20px auto;
+            background: white;
+            position: relative;
+            page-break-after: always;
+            overflow: hidden;
+        }
+        .pdf-page:last-child { margin-bottom: 0; }
+
+        /* ─────────────────────────────────────────
+           PAGE 1 — COVER
+        ───────────────────────────────────────── */
+        .cover-page {
+            height: 297mm;
+            position: relative;
+            background: linear-gradient(160deg, #0a1628 0%, #1a3a6e 40%, #c9a84c 100%);
+        }
+
+        .cover-bg-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center top;
+        }
+
+        .cover-top-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 120px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 100%);
+            z-index: 3;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 22px;
+            gap: 2px;
+        }
+
+        .cover-logo-circle {
+            width: 46px;
+            height: 46px;
+            background: #1a1a2e;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            border: 2px solid #c9a84c;
+        }
+        .cover-brand-name {
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 900;
+            font-size: 13px;
+            color: white;
+            letter-spacing: 3px;
+            line-height: 1;
+        }
+        .cover-brand-name .gold { color: #c9a84c; }
+
+        .cover-title-area {
+            position: absolute;
+            top: 250px;
+            left: 0;
+            right: 0;
+            z-index: 4;
+            text-align: center;
+            padding: 0 20px;
+        }
+
+        .cover-main-title {
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 90px;
+            font-weight: 900;
+            color: #f0ece0;
+            letter-spacing: 8px;
+            line-height: 0.9;
+            text-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            text-transform: uppercase;
+        }
+
+        .cover-cursive-subtitle {
+            font-family: 'Dancing Script', cursive;
+            font-size: 32px;
+            font-weight: 600;
+            color: #f0ece0;
+            margin-top: 12px;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+
+        .cover-bottom-area {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 130px;
+            background: linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 100%);
+            z-index: 5;
+            display: flex;
+            align-items: flex-end;
+            padding-bottom: 36px;
+            padding-left: 24px;
+            padding-right: 24px;
+        }
+
+         
+        .pin-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            position: relative;
+            z-index: 1;
+        }
+        .pin-label {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 9px;
+            font-weight: 600;
+            color: white;
+            text-align: center;
+            margin-bottom: 2px;
+        }
+        .pin-icon {
+            font-size: 26px;
+            line-height: 1;
+        }
+
+        /* ─────────────────────────────────────────
+           PAGE 2 — ABOUT
+        ───────────────────────────────────────── */
+        .about-page {
+            height: 297mm;
+            position: relative;
+            background: linear-gradient(160deg, #0a1628 0%, #1a3a6e 55%, #b8922a 100%);
+            color: white;
+        }
+
+        .about-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.3;
+        }
+
+        .about-content {
+            position: relative;
+            z-index: 2;
+            padding: 44px 42px 40px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .about-heading {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 28px;
+            font-weight: 800;
+            color: white;
+            text-align: center;
+            letter-spacing: 3px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+        }
+
+        .about-tagline {
+            font-size: 18px;
+            font-weight: 600;
+            color: #c9a84c;
+            margin-bottom: 10px;
+        }
+
+        .about-desc {
+            font-size: 18px;
+            font-weight: 400;
+            color: rgba(255,255,255,0.88);
+            line-height: 1.75;
+            text-align: justify;
+            margin-bottom: 14px;
+        }
+
+        .about-known-for {
+            margin-top: auto;
+            text-align: center;
+        }
+        .about-known-heading {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 22px;
+            font-weight: 600;
+            color: #c9a84c;
+            margin-bottom: 14px;
+        }
+        .about-known-list { list-style: none; }
+        .about-known-list li {
+            font-size: 18px;
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .about-cta {
+            margin-top: 28px;
+            text-align: center;
+            font-size: 16px;
+            font-weight: 800;
+            color: #c9a84c;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            border-top: 1px solid rgba(201,168,76,0.4);
+            padding-top: 16px;
+        }
+
+        /* ─────────────────────────────────────────
+           PAGE 3 — BOOKING SUMMARY
+        ───────────────────────────────────────── */
+        .booking-page {
+            height: 297mm;
+            background: white;
+            padding: 40px 38px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .bk-section-title {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 20px;
+            font-weight: 800;
+            color: #1a1a2e;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-bottom: 18px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #c9a84c;
+        }
+
+        .bk-info-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 28px;
+        }
+        .bk-info-table tr:nth-child(odd)  { background: #f8f5ee; }
+        .bk-info-table tr:nth-child(even) { background: #eeead8; }
+        .bk-info-table td { padding: 10px 16px; font-size: 15px; }
+        .bk-info-table td:first-child {
+            font-weight: 600;
+            color: #1a1a2e;
+            width: 38%;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .bk-info-table td:last-child { font-weight: 500; color: #1a1a2e; }
+
+        .price-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .price-table tr:nth-child(odd)  { background: #f8f5ee; }
+        .price-table tr:nth-child(even) { background: #eeead8; }
+        .price-table td { padding: 11px 16px; font-size: 15px; }
+        .price-table td:first-child { font-weight: 600; color: #2d3748; }
+        .price-table td:last-child  { font-weight: 700; color: #1a1a2e; text-align: right; }
+        .price-table tr.total-row td {
+            background: linear-gradient(90deg, #1a1a2e 0%, #2a3a6e 100%);
+            color: white;
+            font-weight: 800;
+            font-size: 14px;
+        }
+        .price-table tr.total-row td:last-child { color: #c9a84c; font-size: 17px; }
+
+        /* ─────────────────────────────────────────
+           PAGE 4 — ITINERARY OVERVIEW
+        ───────────────────────────────────────── */
+        .overview-page {
+            height: 297mm;
+            position: relative;
+            background: linear-gradient(160deg, #0a1628 0%, #1a3a6e 55%, #b8922a 100%);
+        }
+
+        .overview-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.3;
+            object-position: center bottom;
+        }
+
+        .overview-content {
+            position: relative;
+            z-index: 2;
+            padding: 38px 44px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .day-overview-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .day-overview-row + .day-overview-row { margin-top: 6px; }
+
+        .overview-divider {
+            border: none;
+            border-top: 1.5px dashed rgba(201,168,76,0.5);
+            margin: 12px 0;
+        }
+
+        .ov-day-label {
+            font-size: 14px;
+            font-weight: 700;
+            color: #c9a84c;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            min-width: 28px;
+        }
+
+        .ov-day-num {
+            font-size: 48px;
+            font-weight: 800;
+            color: white;
+            line-height: 1;
+            min-width: 64px;
+        }
+
+        .ov-day-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.95);
+        }
+
+        /* ─────────────────────────────────────────
+           ITINERARY DETAIL PAGES — WeasyPrint Safe
+           KEY FIX: display:block + explicit height
+           instead of flex which WeasyPrint breaks
+        ───────────────────────────────────────── */
+        .detail-page {
+            width: 210mm;
+            height: 297mm;
+            max-height: 297mm;
+            position: relative;
+            background: linear-gradient(160deg, #0a1628 0%, #1a3a6e 55%, #b8922a 100%);
+            display: block;         /* NOT flex — WeasyPrint flex breaks 50/50 split */
+            overflow: hidden;
+        }
+
+        /* ── CRITICAL FIX: hard pixel heights, no flex: 1 ── */
+        .day-block {
+            position: relative;
+            width: 100%;
+            height: 148.5mm;        /* exactly half of 297mm */
+            max-height: 148.5mm;
+            overflow: hidden;
+            display: block;
+        }
+
+        .day-block-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 148.5mm;        /* match parent height explicitly */
+            max-height: 148.5mm;
+            object-fit: cover;
+            object-position: center;
+        }
+
+        /* Fallback gradient div used when no image */
+        .day-block-bg-div {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 148.5mm;
+            background: linear-gradient(135deg, #0a1628 0%, #1a3a6e 60%, #b8922a 100%);
+        }
+
+        .day-block-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to right, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.05) 100%);
+            z-index: 2;
+        }
+
+        .day-num-badge {
+            position: absolute;
+            top: 18px;
+            left: 20px;
+            font-family: 'Montserrat', sans-serif;
+            font-size: 38px;
+            font-weight: 900;
+            color: white;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.7);
+            z-index: 4;
+            line-height: 1;
+        }
+        .day-num-badge.right {
+            left: auto;
+            right: 20px;
+            text-align: right;
+        }
+
+        /* ── CRITICAL FIX: removed backdrop-filter (not supported in WeasyPrint) ── */
+        .day-card {
+            position: absolute;
+            bottom: 14px;
+            left: 14px;
+            right: 14px;
+            background: rgba(10, 22, 40, 0.88);  /* more opaque to compensate no blur */
+            border-left: 3px solid #c9a84c;
+            border-radius: 8px;
+            padding: 12px 16px;
+            z-index: 5;
+        }
+
+        .day-card-route {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 16px;
+            font-weight: 800;
+            color: #c9a84c;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .day-card-bullet {
+            display: flex;
+            align-items: flex-start;
+            gap: 7px;
+            margin-bottom: 5px;
+        }
+
+        .day-card-bullet .pin {
+            font-size: 13px;
+            margin-top: 2px;
+            flex-shrink: 0;
+            color: #c9a84c;
+        }
+
+        .day-card-bullet p {
+            font-size: 16px;
+            color: rgba(255,255,255,0.9);
+            line-height: 1.45;
+            font-weight: 400;
+        }
+
+        /* ─────────────────────────────────────────
+           INCLUSIONS & EXCLUSIONS PAGE
+        ───────────────────────────────────────── */
+        .ie-page {
+            height: 297mm;
+            background: white;
+            padding: 36px 38px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .ie-section-title {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 22px;
+            font-weight: 800;
+            color: #1a1a2e;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+            margin-top: 18px;
+        }
+        .ie-section-title:first-child { margin-top: 0; }
+
+        .ie-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 9px 14px;
+            margin-bottom: 5px;
+            border-radius: 6px;
+        }
+        .ie-item.inc { background: #f0faf5; border-left: 3px solid #10b981; }
+        .ie-item.exc { background: #fff5f5; border-left: 3px solid #ef4444; }
+
+        .ie-icon { font-size: 13px; font-weight: 900; flex-shrink: 0; margin-top: 1px; }
+        .ie-icon.inc { color: #10b981; }
+        .ie-icon.exc { color: #ef4444; }
+        .ie-text { font-size: 16px; color: #2d3748; line-height: 1.5; font-weight: 500; }
+
+        .act-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .act-card {
+            background: linear-gradient(135deg, #f8f5ee 0%, #eeead8 100%);
+            padding: 10px 14px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-left: 3px solid #c9a84c;
+        }
+        .act-card .star { font-size: 14px; color: #c9a84c; }
+        .act-name { font-size: 16px; font-weight: 500; color: #1a1a2e; }
+
+        /* ─────────────────────────────────────────
+           PLACES TO VISIT PAGE
+        ───────────────────────────────────────── */
+        .places-page {
+            height: 297mm;
+            position: relative;
+            background: linear-gradient(160deg, #0a1628 0%, #1a3a6e 55%, #b8922a 100%);
+        }
+
+        .places-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.2;
+        }
+
+        .places-content {
+            position: relative;
+            z-index: 2;
+            padding: 36px 30px 30px;
+        }
+
+        .places-heading {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 22px;
+            font-weight: 900;
+            color: white;
+            text-align: center;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        .places-heading-underline {
+            width: 80px;
+            height: 3px;
+            background: #c9a84c;
+            margin: 0 auto 24px;
+            border-radius: 2px;
+        }
+
+        .places-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+        }
+
+        .place-item {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+
+        .place-img-wrap {
+            width: 100%;
+            aspect-ratio: 4/3;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #1a3a6e;
+            border: 2px solid rgba(201,168,76,0.3);
+        }
+        .place-img { width: 100%; height: 200px; object-fit: cover; }
+
+        .place-name {
+            font-size: 16px;
+            font-weight: 800;
+            color: #c9a84c;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            text-align: center;
+        }
+
+        /* ─────────────────────────────────────────
+           THANK YOU PAGE
+        ───────────────────────────────────────── */
+        .thankyou-page {
+            height: 297mm;
+            background: linear-gradient(160deg, #0a1628 0%, #1a3a6e 50%, #b8922a 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 50px 40px;
+        }
+
+        .ty-icon { font-size: 56px; margin-bottom: 16px; }
+
+        .ty-title {
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 32px;
+            font-weight: 800;
+            color: white;
+            margin-bottom: 14px;
+        }
+
+        .ty-body {
+            font-size: 16px;
+            color: rgba(255,255,255,0.8);
+            max-width: 360px;
+            margin-bottom: 36px;
+            line-height: 1.7;
+        }
+
+        .ty-price-card {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(201,168,76,0.5);
+            border-radius: 18px;
+            padding: 32px 48px;
+        }
+        .ty-price-label {
+            font-size: 16px;
+            font-weight: 700;
+            color: #c9a84c;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+        .ty-price-amount {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 44px;
+            font-weight: 900;
+            color: white;
+            margin-bottom: 8px;
+        }
+        .ty-price-meta { font-size: 16px; color: rgba(255,255,255,0.55); }
+
+        .ty-footer {
+            position: absolute;
+            bottom: 26px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 16px;
+            font-weight: 700;
+            color: rgba(201,168,76,0.8);
+            letter-spacing: 2px;
+        }
+
+        /* ─────────────────────────────────────────
+           PRINT OVERRIDES
+        ───────────────────────────────────────── */
+        @media print {
+            body { background: white; margin: 0; padding: 0; }
+            .pdf-page { margin: 0; box-shadow: none; page-break-after: always; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════
+     PAGE 1 — COVER
+══════════════════════════════════════════════ -->
+<div class="pdf-page cover-page">
+    {% if cover_image %}
+    <img src="{{ cover_image }}" class="cover-bg-image" alt="{{ package_name }}">
+    {% else %}
+    <div style="position:absolute;top:0;left:0;width:100%;height:100%;background:linear-gradient(160deg,#0a1628 0%,#1a3a6e 55%,#b8922a 100%);"></div>
+    {% endif %}
+
+    <div class="cover-top-bar">
+        <div class="cover-logo-circle">🏔️</div>
+        <div class="cover-brand-name">AWAARA<br><span class="gold">BANJARA</span></div>
+    </div>
+
+    <div class="cover-title-area">
+        <div class="cover-main-title">{{ package_name | upper | truncate(20, true, '') }}</div>
+        <div class="cover-cursive-subtitle">{{ destination }}</div>
+    </div>
+
+  
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     PAGE 2 — ABOUT
+══════════════════════════════════════════════ -->
+<div class="pdf-page about-page">
+    {% if cover_image %}
+    <img src="{{ cover_image }}" class="about-bg" alt="About">
+    {% endif %}
+
+    <div class="about-content">
+        <div class="about-heading">ABOUT {{ package_name | upper | truncate(30, true, '...') }}</div>
+
+        <p class="about-tagline">Your Himalayan Travel Specialists</p>
+        <p class="about-desc">
+            We don't just visit the Himalayas — we belong to them. Based in the mountains, we are a community-centric travel house dedicated to uncovering the raw, unfiltered beauty of every destination we visit. Every route we take is more than a road trip — it is a pilgrimage for the soul, crafted with local expertise that ensures your journey is as safe as it is legendary.
+        </p>
+        <p class="about-desc">
+            From ancient monasteries to high-altitude deserts, from hidden villages to pristine lakes, we bring you experiences that last a lifetime. Our curated packages are designed to immerse you in nature, culture, and adventure — far beyond the ordinary tourist trail.
+        </p>
+
+        <div class="about-known-for">
+            <div class="about-known-heading">We're known for:</div>
+            <ul class="about-known-list">
+                <li>⭐ 5-star rated service with top Google reviews.</li>
+                <li>🏨 Clean &amp; cozy accommodations at every stop.</li>
+                <li>🚗 Courteous and experienced mountain drivers.</li>
+                <li>🗺️ Offbeat trails &amp; hidden gems.</li>
+                <li>🏔️ Passionate local hosts who know every pass.</li>
+            </ul>
+        </div>
+
+        <div class="about-cta">JOIN US FOR THIS OFFBEAT ESCAPE AND DISCOVER THE REAL HIMALAYAS.</div>
+    </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     PAGE 3 — BOOKING SUMMARY
+══════════════════════════════════════════════ -->
+<div class="pdf-page booking-page">
+    <div class="bk-section-title">Booking Summary</div>
+
+    <table class="bk-info-table">
+        <tr><td>PACKAGE</td><td>{{ package_name }}</td></tr>
+        <tr><td>DESTINATION</td><td>{{ destination }}</td></tr>
+        <tr><td>CHECK-IN</td><td>{{ check_in or 'To be confirmed' }}</td></tr>
+        <tr><td>CHECK-OUT</td><td>{{ check_out or 'To be confirmed' }}</td></tr>
+        <tr><td>DURATION</td><td>{{ nights }} Nights / {{ nights + 1 }} Days</td></tr>
+        <tr><td>GUESTS</td><td>{{ guests }} Pax</td></tr>
+        <tr><td>HOTEL CATEGORY</td><td>{{ hotel_category or 'Premium' }}</td></tr>
+        <tr><td>ROOM TYPE</td><td>{{ room_category or 'Double Sharing' }}</td></tr>
+        <tr><td>VEHICLE</td><td>{{ vehicle_name or 'Tempo Traveller / SUV' }}</td></tr>
+        <tr><td>MEAL PLAN</td><td>MAP — Breakfast + Dinner</td></tr>
+    </table>
+
+    <div class="bk-section-title">Price Breakdown</div>
+
+    <table class="price-table">
+        <tr>
+            <td>Hotel Cost ({{ nights }} nights)</td>
+            <td>{{ hotel_price }}</td>
+        </tr>
+        <tr>
+            <td>MAP Meals (Breakfast + Dinner)</td>
+            <td>{{ map_price }}</td>
+        </tr>
+        {% if vehicle_price %}
+        <tr>
+            <td>Vehicle — {{ vehicle_name }}</td>
+            <td>{{ vehicle_price }}</td>
+        </tr>
+        {% endif %}
+        {% if service_charge %}
+        <tr>
+            <td>Service Charge</td>
+            <td>{{ service_charge }}</td>
+        </tr>
+        {% endif %}
+        <tr class="total-row">
+            <td>GRAND TOTAL</td>
+            <td>{{ total_price }}</td>
+        </tr>
+    </table>
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     PAGE 4 — ITINERARY OVERVIEW
+══════════════════════════════════════════════ -->
+<div class="pdf-page overview-page">
+    {% if cover_image %}
+    <img src="{{ cover_image }}" class="overview-bg" alt="Overview">
+    {% endif %}
+
+    <div class="overview-content">
+        {% for day in itinerary %}
+        <div class="day-overview-row">
+            <div style="display:flex;flex-direction:column;gap:0;min-width:80px;">
+                <span class="ov-day-label">DAY</span>
+                <span class="ov-day-num">{{ '%02d' | format(loop.index) }}</span>
+            </div>
+            <span class="ov-day-title">{{ day.title }}</span>
+        </div>
+        {% if not loop.last %}
+        <hr class="overview-divider">
+        {% endif %}
+        {% endfor %}
+    </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     PAGES 5+ — DETAILED ITINERARY
+     2 days per page. FIXED: display:block + height:148.5mm
+     No flex, no backdrop-filter — WeasyPrint safe
+══════════════════════════════════════════════ -->
+{% for i in range(0, itinerary | length, 2) %}
+<div class="pdf-page detail-page">
+
+    <!-- ── TOP HALF ── -->
+    {% set day_a = itinerary[i] %}
+    <div class="day-block">
+        {% if day_a.image %}
+        <img src="{{ day_a.image }}" class="day-block-bg" alt="{{ day_a.title }}">
+        {% else %}
+        <div class="day-block-bg-div"></div>
+        {% endif %}
+        <div class="day-block-overlay"></div>
+
+        {% if i == 0 %}
+        <div style="position:absolute;top:14px;left:18px;z-index:5;">
+            <div style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:white;text-shadow:0 2px 8px rgba(0,0,0,0.7);letter-spacing:1px;">Detailed Itinerary</div>
+        </div>
+        {% endif %}
+
+        <div class="day-num-badge" style="{% if i == 0 %}top:46px;{% endif %}">Day {{ i + 1 }}</div>
+
+        <div class="day-card">
+            <div class="day-card-route">{{ day_a.title | upper }}</div>
+            {% set sentences = day_a.overview.split('.') %}
+            {% for s in sentences %}{% if s.strip() %}
+            <div class="day-card-bullet">
+                <span class="pin">◆</span>
+                <p>{{ s.strip() }}.</p>
+            </div>
+            {% endif %}{% endfor %}
+        </div>
+    </div>
+
+    <!-- ── BOTTOM HALF ── -->
+    {% if i + 1 < itinerary | length %}
+    {% set day_b = itinerary[i + 1] %}
+    <div class="day-block">
+        {% if day_b.image %}
+        <img src="{{ day_b.image }}" class="day-block-bg" alt="{{ day_b.title }}">
+        {% else %}
+        <div class="day-block-bg-div" style="background:linear-gradient(135deg,#1a3a6e 0%,#0a1628 60%,#c9a84c 100%);"></div>
+        {% endif %}
+        <div class="day-block-overlay"></div>
+
+        <div class="day-num-badge right">Day {{ i + 2 }}</div>
+
+        <div class="day-card">
+            <div class="day-card-route">{{ day_b.title | upper }}</div>
+            {% set sentences2 = day_b.overview.split('.') %}
+            {% for s in sentences2 %}{% if s.strip() %}
+            <div class="day-card-bullet">
+                <span class="pin">◆</span>
+                <p>{{ s.strip() }}.</p>
+            </div>
+            {% endif %}{% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <!-- odd number of days — fill bottom half with gradient -->
+    <div class="day-block">
+        <div class="day-block-bg-div" style="background:linear-gradient(135deg,#1a3a6e 0%,#0a1628 60%,#c9a84c 100%);"></div>
+    </div>
+    {% endif %}
+
+</div>
+{% endfor %}
+
+
+<!-- ══════════════════════════════════════════════
+     INCLUSIONS, EXCLUSIONS & ACTIVITIES PAGE
+══════════════════════════════════════════════ -->
+<div class="pdf-page ie-page">
+    <div class="ie-section-title">✓ What's Included</div>
+    {% for item in inclusions %}
+    <div class="ie-item inc">
+        <span class="ie-icon inc">✓</span>
+        <span class="ie-text">{{ item }}</span>
+    </div>
+    {% endfor %}
+
+    <div class="ie-section-title">✗ What's Not Included</div>
+    {% for item in exclusions %}
+    <div class="ie-item exc">
+        <span class="ie-icon exc">✗</span>
+        <span class="ie-text">{{ item }}</span>
+    </div>
+    {% endfor %}
+
+    {% if activities %}
+    <div class="ie-section-title">★ Activities &amp; Experiences</div>
+    <div class="act-grid">
+        {% for act in activities %}
+        <div class="act-card">
+            <span class="star">★</span>
+            <span class="act-name">{{ act }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     PLACES TO VISIT PAGE
+══════════════════════════════════════════════ -->
+{% if itinerary | length > 0 %}
+<div class="pdf-page places-page">
+    {% if cover_image %}
+    <img src="{{ cover_image }}" class="places-bg" alt="Places">
+    {% endif %}
+
+    <div class="places-content">
+        <div class="places-heading">PLACES TO VISIT</div>
+        <div class="places-heading-underline"></div>
+
+        <div class="places-grid">
+            {% for day in itinerary %}
+            <div class="place-item">
+                <div class="place-img-wrap">
+                    {% if day.image %}
+                    <img src="{{ day.image }}" class="place-img" alt="{{ day.location }}">
+                    {% else %}
+                    <div style="width:100%;height:100%;background:linear-gradient(135deg,#0a1628,#1a3a6e,#b8922a);display:flex;align-items:center;justify-content:center;color:white;font-size:24px;">🏔️</div>
+                    {% endif %}
+                </div>
+                <div class="place-name">{{ day.location | upper }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+
+<!-- ══════════════════════════════════════════════
+     FINAL THANK YOU PAGE
+══════════════════════════════════════════════ -->
+<div class="pdf-page thankyou-page" style="position:relative;">
+    <div class="ty-icon">✨</div>
+    <div class="ty-title">Thank You For Choosing Us!</div>
+    <p class="ty-body">
+        Your journey to {{ destination }} awaits. We have prepared every detail
+        to make your {{ nights }}-night trip truly unforgettable. Pack your bags — adventure calls.
+    </p>
+    <div class="ty-price-card">
+        <div class="ty-price-label">TOTAL PACKAGE COST</div>
+        <div class="ty-price-amount">{{ total_price }}</div>
+        <div class="ty-price-meta">{{ guests }} Guest{% if guests > 1 %}s{% endif %} • {{ nights }} Nights • {{ destination }}</div>
+    </div>
+    <div class="ty-footer">SAFE TRAVELS • UNTIL NEXT TIME!</div>
+</div>
+
+</body>
+</html>
