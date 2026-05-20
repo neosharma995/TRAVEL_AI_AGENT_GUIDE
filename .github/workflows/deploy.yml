@@ -50,7 +50,7 @@ jobs:
           cd /home/ubuntu/TRAVEL_AI_AGENT_GUIDE
           
           # Create .env file with all environment variables
-          cat > .env << 'EOF'
+          cat > .env << EOF
           # API Keys
           OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
           
