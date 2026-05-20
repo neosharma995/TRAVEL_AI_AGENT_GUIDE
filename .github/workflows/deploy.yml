@@ -91,7 +91,6 @@ jobs:
           docker-compose down
           docker-compose up -d
           
-          # Clean up
           docker image prune -f
           
           # Check status
