@@ -1,8 +1,9 @@
 name: Build, Push and Deploy
+
 on:
   push:
-    branches: [ prod ]
-  workflow_dispatch:
+    branches: [ prod ]  # Only deploy from prod branch
+  workflow_dispatch:    # Manual trigger option
 
 env:
   DOCKER_IMAGE: neosharma995/travel-ai-agent-bot
@@ -48,26 +49,74 @@ jobs:
         port: ${{ secrets.VPS_PORT || 22 }}
         script: |
           cd /home/ubuntu/TRAVEL_AI_AGENT_GUIDE
-          cat > .env << EOF
-OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-ACCESS_TOKEN=${{ secrets.ACCESS_TOKEN }}
-VERIFY_TOKEN=${{ secrets.VERIFY_TOKEN }}
-WP_API_BASE=${{ secrets.WP_API_BASE }}
-SECRET_KEY=${{ secrets.SECRET_KEY }}
-DEBUG_MODE=${{ secrets.DEBUG_MODE }}
-MONGODB_USER=${{ secrets.MONGODB_USER }}
-MONGODB_PASS=${{ secrets.MONGODB_PASS }}
-SMTP_HOST=${{ secrets.SMTP_HOST }}
-SMTP_PORT=${{ secrets.SMTP_PORT }}
-SMTP_USER=${{ secrets.SMTP_USER }}
-SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
-ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}
-FROM_EMAIL=${{ secrets.FROM_EMAIL }}
-PORT=${{ secrets.PORT }}
-EOF
+          
+          # Backup current .env if exists
+          if [ -f .env ]; then
+            cp .env .env.backup.$(date +%Y%m%d_%H%M%S)
+          fi
+          
+          # Create fresh .env file
+          cat > .env << 'EOF'
+          # API Keys
+          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          
+          # WhatsApp/Meta
+          ACCESS_TOKEN=${{ secrets.ACCESS_TOKEN }}
+          VERIFY_TOKEN=${{ secrets.VERIFY_TOKEN }}
+          
+          # WordPress API
+          WP_API_BASE=${{ secrets.WP_API_BASE }}
+          
+          # Flask/Debug
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
+          DEBUG_MODE=${{ secrets.DEBUG_MODE }}
+          
+          # MongoDB
+          MONGODB_USER=${{ secrets.MONGODB_USER }}
+          MONGODB_PASS=${{ secrets.MONGODB_PASS }}
+          MONGODB_HOST=mongodb  # Use service name if in docker-compose
+          MONGODB_PORT=27017
+          
+          # Email
+          SMTP_HOST=${{ secrets.SMTP_HOST }}
+          SMTP_PORT=${{ secrets.SMTP_PORT }}
+          SMTP_USER=${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+          ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}
+          FROM_EMAIL=${{ secrets.FROM_EMAIL }}
+          
+          # Port
+          PORT=${{ secrets.PORT || 5000 }}
+          EOF
+          
+          # Stop and remove old containers and volumes (optional: remove volumes if needed)
+          docker-compose down --remove-orphans
+          
+          # Remove old container completely (ensures fresh start)
+          docker container prune -f
+          
+          # Pull the latest image
           docker-compose pull
-          docker-compose down
-          docker-compose up -d --force-recreate --remove-orphans
+          
+          # Start fresh containers (remove old volumes if you want fresh DB)
+          # Use --force-recreate to ensure new containers
+          docker-compose up -d --force-recreate
+          
+          # Remove unused images
           docker image prune -f
+          
+          # Show running containers
           docker-compose ps
+          
+          # Check logs for errors
+          docker-compose logs --tail=50
+          
+          # Health check (optional)
+          sleep 10
+          if curl -f http://localhost:${{ secrets.PORT || 5000 }}/health; then
+            echo "✅ Application started successfully"
+          else
+            echo "⚠️ Application might have issues, check logs above"
+          fi
+          
           echo "Deployment completed at $(date)"
