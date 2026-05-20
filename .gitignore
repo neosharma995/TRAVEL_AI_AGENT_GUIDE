@@ -19,4 +19,11 @@ env/
 # PythonAnywhere / local stuff
 *.sqlite3
 
+
+
 # ngrok config add-authtoken TOKEN
+
+Dockerfile
+docker-compose.yml
+.dockerignore
+generated_pdfs
