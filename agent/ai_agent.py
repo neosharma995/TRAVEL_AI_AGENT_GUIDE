@@ -192,6 +192,15 @@ class AIHotelAgent:
 
             if msg == "change_city":
                 return hotel.handle_change_city(context, state)
+            if msg == "hotels_load_more":
+                context["hotel_page"] = context.get("hotel_page", 0) + 1
+                self._save(state, context)
+                return hotel.format_hotels(context)
+
+            if msg == "rooms_load_more":
+                context["rooms_page"] = context.get("rooms_page", 0) + 1
+                self._save(state, context)
+                return hotel.format_rooms(context)
 
             if msg == "confirm" and context.get("step") == "final_summary":
                 return hotel.confirm_hotel_booking(context, phone, business_phone, state, self._reset_to_welcome)
@@ -294,6 +303,16 @@ class AIHotelAgent:
                 context["step"] = "pkg_ask_room_category"
                 self._save(state, context)
                 return pkg.fetch_room_categories(context, tools, state)
+            if msg == "packages_load_more":
+                context["packages_page"] = context.get("packages_page", 0) + 1
+                self._save(state, context)
+                from agent.ui_cards import card_pkg_packages
+                return card_pkg_packages(context)
+
+            if msg == "vehicles_load_more":
+                context["vehicles_page"] = context.get("vehicles_page", 0) + 1
+                self._save(state, context)
+                return pkg.fetch_package_vehicles.__wrapped__(context)  # see note below
 
             
             

@@ -78,6 +78,7 @@ def fetch_packages(context: Dict, tools: TravelTools, state) -> Dict:
         context["packages_list"] = matched
         if matched:
             context["step"] = "pkg_show_packages"
+            context["packages_page"] = 0
             save_context(state, context)
             return card_pkg_packages(context)
         
@@ -153,8 +154,11 @@ def fetch_package_vehicles(context: Dict, tools: TravelTools, state) -> Dict:
             }
 
         context["vehicles_list"] = normalised
+        if context.get("vehicles_page") is None:
+            context["vehicles_page"] = 0
         context["step"]          = "pkg_ask_vehicle"
         save_context(state, context)
+        context["vehicles_page"] = 0
         return card_vehicles_list(context)
 
     except Exception as e:

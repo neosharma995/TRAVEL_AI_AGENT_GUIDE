@@ -50,6 +50,10 @@ def default_context(business_phone: str = "default") -> Dict:
         "selected_hotels": {},
         "date_error": None,
         "pkg_awaiting_start_date": False,
+        "hotel_page": 0,
+        "rooms_page": 0,
+        "packages_page": 0,
+        "vehicles_page": 0,
     }
 
 

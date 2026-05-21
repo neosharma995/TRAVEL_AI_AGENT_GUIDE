@@ -25,6 +25,9 @@ def fp(price) -> str:
 # WELCOME
 # ═══════════════════════════════════════════════════════════════════════════════
 
+PAGE_SIZE    = 3
+
+
 def card_welcome() -> Dict:
     content = (
         "*TRAVEL ASSISTANT*\n\n"
@@ -80,7 +83,12 @@ def card_hotel_list(context: Dict) -> Dict:
     """
     Hotel listing - returns a list of cards, each card = image + hotel details + single button.
     """
-    hotels   = context.get("hotels_list", [])[:8]
+    all_hotels = context.get("hotels_list", [])
+    page       = context.get("hotel_page", 0)
+    start      = page * PAGE_SIZE
+    end        = start + PAGE_SIZE
+    hotels     = all_hotels[start:end]
+    has_more   = end < len(all_hotels)
     category = context.get("selected_category", "")
     dest     = context.get("destination", "")
 
@@ -122,6 +130,24 @@ def card_hotel_list(context: Dict) -> Dict:
                     {"text": "Change City",        "value": "change_city"},
                 ]
             })
+            responses.append({
+                "type": "buttons",
+                "content": f"Showing hotels {start + 1}–{start + len(hotels)} of {len(all_hotels)}",
+                "buttons": [
+                    {"text": "Load More Hotels", "value": "hotels_load_more"},
+                    {"text": "Back to Categories", "value": "back_to_categories"},
+                ]
+            })
+
+    if has_more:
+        responses.append({
+            "type": "buttons",
+            "content": f"Showing {start + 1}–{start + len(hotels)} of {len(all_hotels)} hotels",
+            "buttons": [
+                {"text": "Load More Hotels",   "value": "hotels_load_more"},
+                {"text": "Back to Categories", "value": "back_to_categories"},
+            ]
+        })        
 
     return {"type": "multi", "responses": responses}
 
@@ -131,7 +157,12 @@ def card_hotel_rooms(context: Dict) -> Dict:
     Room listing - each room with image + room details + button.
     Shows seasonal pricing based on user's check-in date.
     """
-    rooms        = context.get("rooms_list", [])[:6]
+    all_rooms  = context.get("rooms_list", [])
+    page       = context.get("rooms_page", 0)
+    start      = page * PAGE_SIZE
+    end        = start + PAGE_SIZE
+    rooms      = all_rooms[start:end]
+    has_more   = end < len(all_rooms)
     hotel_name   = context.get("selected_hotel", "Hotel")
     check_in_str = context.get("check_in", "")
 
@@ -233,6 +264,15 @@ def card_hotel_rooms(context: Dict) -> Dict:
                 {"text": "Other Hotels",         "value": "other_hotels"},
             ]
         })
+    if has_more:
+        responses.append({
+            "type": "buttons",
+            "content": f"Showing {start + 1}–{start + len(rooms)} of {len(all_rooms)} rooms",
+            "buttons": [
+                {"text": "Load More Rooms", "value": "rooms_load_more"},
+                {"text": "Other Hotels",    "value": "other_hotels"},
+            ]
+        })  
 
     return {"type": "multi", "responses": responses}
 
@@ -316,7 +356,12 @@ def card_hotel_summary(context: Dict) -> Dict:
 
 def card_pkg_packages(context: Dict) -> Dict:
     """Package listing - each package as its own card."""
-    pkgs = context.get("packages_list", [])[:6]
+    all_pkgs     = context.get("packages_list", [])
+    page         = context.get("packages_page", 0)
+    start        = page * PAGE_SIZE
+    end          = start + PAGE_SIZE
+    pkgs         = all_pkgs[start:end]
+    has_more     = end < len(all_pkgs)
     dest = context.get("destination", "")
     responses = []
 
@@ -352,6 +397,14 @@ def card_pkg_packages(context: Dict) -> Dict:
                 "content": text_content,
                 "buttons": [{"text": "View Package", "value": f"select_package_{i}"}]
             })
+    if has_more:
+        responses.append({
+            "type": "buttons",
+            "content": f"Showing {start + 1}–{start + len(pkgs)} of {len(all_pkgs)} packages",
+            "buttons": [
+                {"text": "Load More Packages", "value": "packages_load_more"},
+            ]
+        })     
 
     return {"type": "multi", "responses": responses}
 
@@ -575,7 +628,12 @@ def card_pkg_summary(context: Dict) -> Dict:
 
 def card_vehicles_list(context: Dict) -> Dict:
     """Vehicle listing - same pattern as card_hotel_rooms."""
-    vehicles         = context.get("vehicles_list", [])
+    all_vehicles = context.get("vehicles_list", [])
+    page         = context.get("vehicles_page", 0)
+    start        = page * PAGE_SIZE
+    end          = start + PAGE_SIZE
+    vehicles     = all_vehicles[start:end]
+    has_more     = end < len(all_vehicles)
     check_in_str     = context.get("check_in", "")
 
     def get_vehicle_seasonal_price(vehicle: Dict, check_in_date: str) -> tuple:
@@ -638,5 +696,15 @@ def card_vehicles_list(context: Dict) -> Dict:
                 "content": text_content,
                 "buttons": [{"text": "Select Vehicle", "value": f"select_vehicle_{i}"}]
             })
+    if has_more:
+        responses.append({
+            "type": "buttons",
+            "content": f"Showing {start + 1}–{start + len(vehicles)} of {len(all_vehicles)} vehicles",
+            "buttons": [
+                {"text": "Load More Vehicles", "value": "vehicles_load_more"},
+                {"text": "Other Packages",     "value": "pkg_other_packages"},
+            ]
+        })
+ 
 
     return {"type": "multi", "responses": responses}
