@@ -7,6 +7,7 @@ services:
     image: neosharma995/travel-ai-agent-bot:${IMAGE_TAG:-web-prod}
     container_name: whatsapp-bot
     restart: unless-stopped
+    pull_policy: always
     ports:
       - "${PORT:-5000}:5000"
     env_file:
