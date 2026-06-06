@@ -87,18 +87,19 @@ jobs:
 
           echo "✅ .env written"
 
-          # ── IMPORTANT: Force pull the latest image ─────────────────────────
-          # This ensures we get the fresh image even with same stable tag
-          echo "📥 Pulling latest images..."
-          docker compose pull --quiet
+          # ── Pull the SHA-tagged image first (for rollback) ─────────────────
+          echo "📥 Pulling SHA-tagged image for rollback..."
+          docker pull $DOCKER_IMAGE:$DOCKER_SHA_TAG || echo "⚠️ SHA tag pull failed, continuing..."
+
+          # ── Pull the latest stable image ───────────────────────────────────
+          echo "📥 Pulling latest stable image..."
+          docker compose pull whatsapp-bot
 
           # ── Force recreate containers with new image ──────────────────────
           echo "🔄 Recreating containers..."
           docker compose up -d \
             --force-recreate \
-            --remove-orphans \
-            --no-deps \
-            whatsapp-bot
+            --remove-orphans
 
           # ── Clean up old images ───────────────────────────────────────────
           echo "🧹 Cleaning up old images..."
@@ -114,6 +115,7 @@ jobs:
           docker compose logs --tail=50 whatsapp-bot
 
           # ── Health check ──────────────────────────────────────────────────
+          # Read PORT from .env file
           APP_PORT=$(grep -E '^PORT=' .env | cut -d'=' -f2 | tr -d ' ' | head -1)
           APP_PORT="${APP_PORT:-5000}"
 
@@ -121,22 +123,13 @@ jobs:
           echo "🏥 Health check on port $APP_PORT ..."
           sleep 15
 
-          # Check if container is healthy
-          CONTAINER_STATUS=$(docker inspect --format='{{.State.Health.Status}}' whatsapp-bot 2>/dev/null || echo "none")
-          
-          if [ "$CONTAINER_STATUS" = "healthy" ] || curl -fsS "http://localhost:$APP_PORT/health" > /dev/null; then
-            echo "✅ Application is healthy"
-            
-            # Optional: Tag successful deployment
-            docker tag $DOCKER_IMAGE:$DOCKER_SHA_TAG $DOCKER_IMAGE:web-prod-latest
+          # Check if container is running and healthy
+          if curl -fsS "http://localhost:$APP_PORT/health" > /dev/null 2>&1; then
+            echo "✅ Application is healthy on port $APP_PORT"
+            echo "✅ Successfully deployed: $DOCKER_IMAGE:$DOCKER_STABLE_TAG"
           else
-            echo "❌ Health check failed — rolling back to previous stable image"
-            # Rollback logic
-            PREVIOUS_IMAGE=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "$DOCKER_IMAGE:web-prod-" | head -1)
-            if [ -n "$PREVIOUS_IMAGE" ]; then
-              docker tag $PREVIOUS_IMAGE $DOCKER_IMAGE:$DOCKER_STABLE_TAG
-              docker compose up -d --force-recreate
-            fi
+            echo "❌ Health check failed on port $APP_PORT"
+            echo "❌ Deployment failed - check logs above"
             exit 1
           fi
 
