@@ -8,6 +8,7 @@ from typing import Dict, Optional
 from datetime import datetime
 from openai import OpenAI
 import os
+from agent.session_manager import touch, remove
 
 from agent.tools import TravelTools, TOOL_DEFINITIONS
 from agent.ui_cards import card_welcome, fp
@@ -65,6 +66,7 @@ class AIHotelAgent:
             self.sessions[key]["context"] = fresh
             self.sessions[key]["history"] = []
         save_context(state, fresh)
+        remove(key) 
 
     def execute_tool(self, tool_name: str, parameters: Dict, tools: TravelTools) -> Dict:
         logger.info(f"🚀 TOOL: {tool_name} | PARAMS: {json.dumps(parameters, default=str)}")
@@ -124,11 +126,48 @@ class AIHotelAgent:
         session = self.sessions[sk]
         context = session["context"]
         session["history"].append({"role": "user", "content": user_message})
+        touch(sk)
         msg = user_message.strip().lower()
 
         # ════════════════════════════════════════════════════════
         #  WELCOME / RESET
         # ════════════════════════════════════════════════════════
+        if msg == "resume_session":
+           
+            missing = get_missing_field(context)
+            if not missing:
+                svc = context.get("service_type")
+                if svc == "hotel":
+                    step = context.get("step", "")
+                    if step == "final_summary":
+                        return hotel.format_summary(context)
+                    if step == "show_rooms":
+                        return hotel.format_rooms(context)
+                    if step == "show_hotels":
+                        return hotel.format_hotels(context)
+                    if step == "show_categories":
+                        return hotel.proceed_to_categories(context, tools, state, self.execute_tool)
+                if svc == "package":
+                    from agent.ui_cards import card_pkg_summary, card_pkg_packages
+                    step = context.get("step", "")
+                    if step in ("pkg_final_summary", "pkg_show_itinerary"):
+                        return card_pkg_summary(context)
+                    if step == "pkg_show_packages":
+                        return card_pkg_packages(context)
+                    if step == "pkg_ask_vehicle":
+                        return pkg.fetch_package_vehicles(context, tools, state)
+            if missing:
+                return ask_for_field(missing, context)
+            return card_welcome()
+        
+        if msg == "exit_session":
+             
+            self._reset_to_welcome(phone, business_phone, state)
+            remove(sk)
+            return {
+                "type": "text",
+                "content": "👋 No problem! Your session has been cleared.\n\nType *Hi* whenever you want to start a new booking. ✈️"
+            }
         if msg in WELCOME_KEYWORDS:
             if context.get("step") in ("welcome", None) or msg in (
                 "hi", "hii", "hello", "hey", "home", "restart",
@@ -210,8 +249,18 @@ class AIHotelAgent:
         # ════════════════════════════════════════════════════════
         if svc == "package":
 
+            # AFTER
             if msg == "pkg_generate_pdf":
-                return pkg.generate_and_send_pdf(context, phone, business_phone, state)
+                return pkg.generate_and_send_pdf(
+                    context, phone, business_phone, state, self._reset_to_welcome
+                )
+
+            if msg == "pkg_exit":
+                self._reset_to_welcome(phone, business_phone, state)
+                return {
+                    "type": "text",
+                    "content": "👋 Thank you for booking with us! Have a wonderful trip. ✈️\n\nNow to start a new booking!",
+                }
 
             # Hotel category selection
             hotel_cats = [c.get("name", "").lower() for c in (context.get("hotel_categories") or [])]
@@ -516,4 +565,5 @@ class AIHotelAgent:
         if missing:
             return ask_for_field(missing, context)
 
-        return card_welcome()
+        return card_welcome(business_phone)
+

@@ -1,12 +1,13 @@
 from flask import render_template, Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO, join_room
+from agent.session_manager import start_session_manager
 import json
 import os
 import logging
 from dotenv import load_dotenv
 from datetime import datetime
-
+import re
 from chats.routes import register_chat_routes
 from chats.delete_routes import register_delete_routes
 from chats.message_handler import process_incoming_message
@@ -39,28 +40,168 @@ CORS(
     allow_headers=["Content-Type", "Authorization", "ngrok-skip-browser-warning"]
 )
 
-# FIX: switched from eventlet to threading
-# threading mode works correctly with OpenAI SDK (httpx/requests)
-# Install dependency: pip install simple-websocket
+  
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    async_mode='threading',     # ← was 'eventlet', caused 502s
+    async_mode='threading',
+    cors_credentials=True,
     logger=False,
-    engineio_logger=False
+    engineio_logger=False,
+    ping_timeout=60,       
+    ping_interval=25,
 )
 
 app.socketio = socketio
+
+from bot import _agent as travel_agent    
+ 
+def _get_session(session_key: str):
+    """Return the live session dict for a given key, or None."""
+    return travel_agent.sessions.get(session_key)
+ 
+def _reset_session(user_phone: str, business_phone: str, state: dict):
+    """Hard-reset a user's session (called by session manager)."""
+    travel_agent._reset_to_welcome(user_phone, business_phone, state)
+ 
+start_session_manager(
+    get_session_fn = _get_session,
+    reset_fn       = _reset_session,
+    openai_client  = travel_agent.client,   # reuse existing OpenAI client
+)
 
 
 # ── SOCKET EVENTS ─────────────────────────────────────────────────────────────
 
 @socketio.on('join')
-def handle_join(data):
-    room = data.get('room')
+def handle_join_legacy(data):
+    room = data.get('room') or data.get('display_phone_number')
     if room:
         join_room(room)
-        logger.info(f"🔗 Client joined room: {room}")
+        logger.info(f"🔗 Client joined room (legacy): {room}")
+
+@socketio.on('send_message_websocket')
+def handle_ws_send(data):
+    logger.info("=" * 60)
+    logger.info("📨 WebSocket send_message_websocket triggered")
+    logger.info(f"📦 Raw data received: {data}")
+    
+    phone = data.get('user_phone')
+    message = data.get('message')
+    display_no = data.get('display_phone_number')
+    
+    logger.info(f"📱 Extracted values:")
+    logger.info(f"   - user_phone: {phone}")
+    logger.info(f"   - message: {message}")
+    logger.info(f"   - display_phone_number: {display_no}")
+    
+    # Get proper phone_number_id from database by searching with display_number
+    phone_number_id = None
+    actual_display_number = display_no
+    
+    if not display_no:
+        logger.error("❌ Missing display_phone_number in request")
+        return
+    
+    try:
+        from database.database import whatsapp_numbers
+        
+        # Search by display_number (NOT phone_number_id)
+        normalized_display = re.sub(r'[^\d]', '', str(display_no))
+        logger.info(f"🔍 Looking up WhatsApp config for normalized display number: {normalized_display}")
+        
+        config = whatsapp_numbers.find_one({
+            "$or": [
+                {"display_number": normalized_display},
+                {"display_phone_number_raw": normalized_display},
+                {"display_phone_number": {"$regex": f".*{normalized_display}$"}}
+            ],
+            "is_active": True
+        })
+        
+        logger.info(f"📋 Config retrieved: {config}")
+        
+        if config:
+            phone_number_id = config.get('phone_number_id')
+            actual_display_number = config.get('display_number') or config.get('display_phone_number_raw')
+            logger.info(f"✅ Found phone_number_id: {phone_number_id}")
+            logger.info(f"📞 Normalized display number: {actual_display_number}")
+        else:
+            logger.error(f"❌ No WhatsApp config found for display number: {display_no}")
+            logger.error(f"   Please check that number {display_no} is registered in whatsapp_numbers collection")
+            return
+            
+    except Exception as e:
+        logger.error(f"❌ Error fetching WhatsApp config: {e}", exc_info=True)
+        return
+    
+    # Validate required fields
+    if not phone:
+        logger.error("❌ Missing user_phone in request")
+        return
+    
+    if not message:
+        logger.error("❌ Missing message content")
+        return
+    
+    if not phone_number_id:
+        logger.error(f"❌ No phone_number_id resolved for display_no: {display_no}")
+        return
+    
+    logger.info(f"✅ All validations passed")
+    
+    try:
+        from chats.whatsapp_sender import send_whatsapp_message
+        from database.database import messages as msg_col, get_or_create_user
+        
+        # Get or create user
+        logger.info(f"👤 Getting/Creating user for phone: {phone}")
+        user = get_or_create_user(phone, actual_display_number, phone_number_id)
+        logger.info(f"✅ User retrieved/created: user_id={user.get('user_id')}")
+        
+        # Save message to database
+        message_doc = {
+            "user_phone": phone,
+            "user_id": user["user_id"],
+            "message": message,
+            "from": "partner",
+            "timestamp": datetime.utcnow(),
+            "display_phone_number_raw": actual_display_number,
+            "sender_phone_number_id": phone_number_id
+        }
+        
+        logger.info(f"💾 Saving message to database")
+        insert_result = msg_col.insert_one(message_doc)
+        logger.info(f"✅ Message saved to DB with _id: {insert_result.inserted_id}")
+        
+        # Send via WhatsApp API
+        logger.info(f"📤 Attempting to send WhatsApp message via API...")
+        
+        result = send_whatsapp_message(
+            phone,
+            {"type": "text", "content": message},
+            phone_number_id  # This now contains the actual phone_number_id from Meta
+        )
+        
+        logger.info(f"📊 send_whatsapp_message result: {result}")
+        
+        if result:
+            logger.info(f"✅✅✅ SUCCESS: Agent message sent to {phone}")
+            
+            # Emit back to confirm delivery
+            emit_new_message(phone, {
+                "from": "partner",
+                "message": {"type": "text", "content": message},
+                "timestamp": datetime.utcnow().isoformat() + 'Z'
+            }, actual_display_number)
+            logger.info(f"✅ Confirmation emitted")
+        else:
+            logger.error(f"❌❌❌ FAILED: WhatsApp API call failed for {phone}")
+            
+    except Exception as e:
+        logger.error(f"❌❌❌ Exception in handle_ws_send: {e}", exc_info=True)
+    
+    logger.info("=" * 60)
 
 
 # ── EMIT HELPER ───────────────────────────────────────────────────────────────
@@ -239,7 +380,7 @@ def agent_takeover():
                     user_phone,
                     {
                         "type": "text",
-                        "content": f"👤 You are now connected with a live agent ({agent_name}). The bot has been paused."
+                        "content": f"👤 You are now connected with a live agent."
                     },
                     phone_number_id
                 )
@@ -252,7 +393,7 @@ def agent_takeover():
                 "from": "system",
                 "message": {
                     "type": "text",
-                    "content": f"👤 Agent {agent_name} has taken over the chat. Bot responses are now disabled."
+                    "content": f"👤 Agent {agent_name} has taken over the chat. Ai Agent responses are now disabled."
                 },
                 "timestamp": datetime.utcnow().isoformat() + 'Z'
             },
@@ -292,7 +433,7 @@ def agent_release():
                     user_phone,
                     {
                         "type": "text",
-                        "content": "🤖 You have been reconnected with our bot. How can I help you?"
+                        "content": "🤖 You have been reconnected with our Ai Agent."
                     },
                     phone_number_id
                 )
@@ -370,6 +511,133 @@ def health():
 def queue_stats():
     return jsonify(user_queue_manager.stats())
 
+@app.route('/plan/status', methods=['GET', 'OPTIONS'])
+def plan_status():
+    """Frontend polls this to know if plan is active or expired."""
+    if request.method == 'OPTIONS':
+        return '', 200
+
+    try:
+        from plan_checker import is_bot_allowed
+        owner_phone = request.args.get('owner_phone')
+        if not owner_phone:
+            return jsonify({"error": "owner_phone required"}), 400
+
+        bot_allowed, reason = is_bot_allowed(owner_phone)
+        return jsonify({
+            "plan_active": bot_allowed,
+            "reason": reason
+        }), 200
+    except Exception as e:
+        logger.error(f"❌ plan_status error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/agent/release-all', methods=['POST'])
+def release_all_agents():
+    """
+    Restart Bot button — verifies plan is active via WordPress,
+    then releases ALL agent sessions for this business number at once.
+    No need to go user by user.
+    """
+    try:
+        from plan_checker import is_bot_allowed
+        from chats.message_handler import agent_release_chat
+
+        data = request.get_json()
+        display_phone_number = data.get('display_phone_number')
+        owner_phone = data.get('owner_phone')  # business owner's phone to check plan
+
+        if not display_phone_number:
+            return jsonify({"error": "display_phone_number required"}), 400
+
+        if not owner_phone:
+            return jsonify({"error": "owner_phone required"}), 400
+
+        # Step 1: Verify plan is active before releasing anything
+        bot_allowed, reason = is_bot_allowed(owner_phone)
+        if not bot_allowed:
+            return jsonify({
+                "success": False,
+                "error": f"Plan still not active ({reason}). Please renew your plan first."
+            }), 403
+
+        # Step 2: Find ALL agent sessions for this business number
+        # Get all users under this display_phone_number
+        from database.database import whatsapp_numbers, db
+        import re
+
+        normalized = re.sub(r'[^\d]', '', str(display_phone_number))
+
+        # Get all agent sessions that are active
+        active_sessions = list(db.agent_sessions.find({"active": True}))
+
+        if not active_sessions:
+            return jsonify({
+                "success": True,
+                "message": "No active agent sessions found. Bot is already running.",
+                "released_count": 0
+            }), 200
+
+        # Step 3: Release every active session
+        released_count = 0
+        released_phones = []
+
+        for session in active_sessions:
+            user_phone = session.get('user_phone')
+            if not user_phone:
+                continue
+
+            try:
+                agent_release_chat(user_phone)
+                released_phones.append(user_phone)
+                released_count += 1
+
+                # Send WhatsApp message to each user that bot is back
+                try:
+                    config = get_whatsapp_config(display_phone_number)
+                    phone_number_id = config.get('phone_number_id') if config else None
+                    if phone_number_id:
+                        from chats.whatsapp_sender import send_whatsapp_message
+                        send_whatsapp_message(
+                            user_phone,
+                            {
+                                "type": "text",
+                                "content": "🤖 Our AI assistant is back online and ready to help you!"
+                            },
+                            phone_number_id
+                        )
+                except Exception as e:
+                    logger.error(f"❌ Failed to send restart message to {user_phone}: {e}")
+
+                # Emit system message to dashboard for each user
+                emit_new_message(
+                    user_phone=user_phone,
+                    message_data={
+                        "from": "system",
+                        "message": {
+                            "type": "text",
+                            "content": "✅ Bot restarted. AI assistant is now active for this user."
+                        },
+                        "timestamp": datetime.utcnow().isoformat() + 'Z'
+                    },
+                    display_phone_number=display_phone_number
+                )
+
+            except Exception as e:
+                logger.error(f"❌ Failed to release session for {user_phone}: {e}")
+
+        logger.info(f"✅ Released {released_count} agent sessions for {display_phone_number}")
+
+        return jsonify({
+            "success": True,
+            "message": f"Bot restarted for {released_count} user(s).",
+            "released_count": released_count,
+            "released_phones": released_phones
+        }), 200
+
+    except Exception as e:
+        logger.error(f"❌ release_all_agents error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 # ── ENTRYPOINT ────────────────────────────────────────────────────────────────
 

@@ -9,12 +9,42 @@ from pathlib import Path
 
 from jinja2 import Template
 import requests
-
 logger = logging.getLogger(__name__)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
+
+
+
+WP_API_BASE = os.getenv("WP_API_BASE", "https://silver-spoonbill-286441.hostingersite.com/wp-json/hm/v1")
+
+def fetch_company_info(business_phone: str) -> dict:
+    """Fetch company name, logo, and bank details from the about-us API."""
+    try:
+        url = f"{WP_API_BASE}/about-us?phone={business_phone}"
+        resp = requests.get(url, timeout=5)
+        data = resp.json()
+        if data.get("status") and data.get("about_us"):
+            a = data["about_us"]
+            return {
+                "company_name":         a.get("company_name", "Travel Co."),
+                "company_logo":         a.get("company_logo", ""),
+                "bank_name":            a.get("bank_name", ""),
+                "account_holder_name":  a.get("account_holder_name", ""),
+                "account_number":       a.get("account_number", ""),
+                "account_type":         a.get("acount_type", ""),
+                "ifsc_code":            a.get("ifsc_code", ""),
+                "upi_id":               a.get("upi_id", ""),
+                "qr_code_image":        a.get("qr_code_image", ""),
+            }
+    except Exception as e:
+        logger.warning(f"fetch_company_info failed: {e}")
+    return {
+        "company_name": "Travel Co.", "company_logo": "",
+        "bank_name": "", "account_holder_name": "", "account_number": "",
+        "account_type": "", "ifsc_code": "", "upi_id": "", "qr_code_image": "",
+    }
 
 def _fp(price) -> str:
     """Format price to ₹ X,XXX"""
@@ -108,11 +138,18 @@ def generate_package_pdf(
     package_data: Dict,
     context: Dict,
     output_path: str,
+    company_info: dict = None,
 ) -> str:
     """
     Generate a travel package PDF from an HTML/Jinja2 template.
     """
     from weasyprint import HTML
+    if company_info is None:
+        company_info = {
+            "company_name": "Travel Co.", "company_logo": "",
+            "bank_name": "", "account_holder_name": "", "account_number": "",
+            "account_type": "", "ifsc_code": "", "upi_id": "", "qr_code_image": "",
+        }
 
     # ── Load template ────────────────────────────────────────────────────────
     template_path = Path(__file__).parent / "pdf_template.html"
@@ -187,6 +224,14 @@ def generate_package_pdf(
             "overview": overview[:600] if overview else "Experience the beauty of this destination.",
             "image":    day_img_b64,
         })
+    
+    logo_url = company_info.get("company_logo", "")
+    logo_b64 = _fetch_image_base64(logo_url) if logo_url else None
+
+    # ── Fetch QR code as base64 ──────────────────────────────────
+    qr_url = company_info.get("qr_code_image", "")
+    qr_b64 = _fetch_image_base64(qr_url) if qr_url else None
+
 
     # ── Build template context ───────────────────────────────────────────────
     template_data = {
@@ -225,6 +270,15 @@ def generate_package_pdf(
             "Mountain Trekking",
             "Local Sightseeing",
         ],
+        "company_name":        company_info["company_name"],
+        "company_logo":        logo_b64,
+        "bank_name":           company_info["bank_name"],
+        "account_holder_name": company_info["account_holder_name"],
+        "account_number":      company_info["account_number"],
+        "account_type":        company_info["account_type"],
+        "ifsc_code":           company_info["ifsc_code"],
+        "upi_id":              company_info["upi_id"],
+        "qr_code_image":       qr_b64,
     }
 
     # ── Render HTML ──────────────────────────────────────────────────────────
