@@ -1,10 +1,10 @@
-# Dockerfile
-FROM python:3.11-slim
+# ── Base ────────────────────────────────────────────────────────────────────
+FROM python:3.11-slim AS base
 
 WORKDIR /app
 
-# Install ONLY essential dependencies
-RUN apt-get update && apt-get install -y \
+# System dependencies (layer cached until this list changes)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     curl \
     libpango-1.0-0 \
@@ -16,14 +16,20 @@ RUN apt-get update && apt-get install -y \
     shared-mime-info \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
+# ── Dependencies ─────────────────────────────────────────────────────────────
+# Copy requirements first so pip layer is cached unless requirements change
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# ── Application ──────────────────────────────────────────────────────────────
 COPY . .
 
-# Create necessary directories
+# Embed the git commit SHA as a build arg so you can verify which
+# code is running inside the container: GET /health returns it.
+ARG GIT_SHA=unknown
+ENV GIT_SHA=${GIT_SHA}
+
+# Runtime directories (also created via volume mounts, but needed for non-volume runs)
 RUN mkdir -p generated_pdfs logs
 
 EXPOSE 5000

@@ -2,43 +2,48 @@ name: Build, Push and Deploy
 
 on:
   push:
-    branches: [ prod ]  # Only deploy from prod branch
-  workflow_dispatch:    # Manual trigger option
+    branches: [ prod ]
+  workflow_dispatch:
 
 env:
   DOCKER_IMAGE: neosharma995/travel-ai-agent-bot
-  DOCKER_TAG: web-prod
+  DOCKER_STABLE_TAG: web-prod
+  DOCKER_SHA_TAG: web-prod-${{ github.sha }}
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
-    
+
     - name: Log in to Docker Hub
       uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
-    
+
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
         context: .
         push: true
-        tags: ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
+        # Push BOTH a stable tag and a unique SHA tag.
+        # The SHA tag busts the Docker cache on VPS every single deploy.
+        tags: |
+          ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_STABLE_TAG }}
+          ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_SHA_TAG }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
-  
+
   deploy-to-vps:
     needs: build-and-push
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Deploy to VPS
       uses: appleboy/ssh-action@v1.0.3
@@ -47,36 +52,43 @@ jobs:
         username: ${{ secrets.VPS_USER }}
         key: ${{ secrets.VPS_SSH_KEY }}
         port: ${{ secrets.VPS_PORT || 22 }}
+        # Pass the SHA tag into the remote shell via envs
+        envs: DOCKER_IMAGE,DOCKER_SHA_TAG
         script: |
+          set -e  # Exit immediately on any error
+
+          echo "🚀 Starting deployment at $(date)"
+          echo "📦 Image: $DOCKER_IMAGE:$DOCKER_SHA_TAG"
+
           cd /home/ubuntu/TRAVEL_AI_AGENT_GUIDE
-          
-          # Backup current .env if exists
+
+          # ── Backup & recreate .env ──────────────────────────────────────────
           if [ -f .env ]; then
             cp .env .env.backup.$(date +%Y%m%d_%H%M%S)
+            echo "✅ .env backed up"
           fi
-          
-          # Create fresh .env file
-          cat > .env << 'EOF'
+
+          cat > .env << 'ENVEOF'
           # API Keys
           OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          
-          # WhatsApp/Meta
+
+          # WhatsApp / Meta
           ACCESS_TOKEN=${{ secrets.ACCESS_TOKEN }}
           VERIFY_TOKEN=${{ secrets.VERIFY_TOKEN }}
-          
+
           # WordPress API
           WP_API_BASE=${{ secrets.WP_API_BASE }}
-          
-          # Flask/Debug
+
+          # Flask
           SECRET_KEY=${{ secrets.SECRET_KEY }}
           DEBUG_MODE=${{ secrets.DEBUG_MODE }}
-          
+
           # MongoDB
           MONGODB_USER=${{ secrets.MONGODB_USER }}
           MONGODB_PASS=${{ secrets.MONGODB_PASS }}
-          MONGODB_HOST=mongodb  # Use service name if in docker-compose
+          MONGODB_HOST=mongodb
           MONGODB_PORT=27017
-          
+
           # Email
           SMTP_HOST=${{ secrets.SMTP_HOST }}
           SMTP_PORT=${{ secrets.SMTP_PORT }}
@@ -84,39 +96,61 @@ jobs:
           SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
           ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}
           FROM_EMAIL=${{ secrets.FROM_EMAIL }}
-          
-          # Port
+
+          # App Port
           PORT=${{ secrets.PORT || 5000 }}
-          EOF
-          
-          # Stop and remove old containers and volumes (optional: remove volumes if needed)
-          docker-compose down --remove-orphans
-          
-          # Remove old container completely (ensures fresh start)
-          docker container prune -f
-          
-          # Pull the latest image
-          docker-compose pull
-          
-          # Start fresh containers (remove old volumes if you want fresh DB)
-          # Use --force-recreate to ensure new containers
-          docker-compose up -d --force-recreate
-          
-          # Remove unused images
+          ENVEOF
+
+          echo "✅ .env written"
+
+          # ── Pull the exact SHA-tagged image ────────────────────────────────
+          # Using the SHA tag guarantees Docker downloads the new image
+          # even if the registry still serves 'web-prod' from cache.
+          echo "📥 Pulling image $DOCKER_IMAGE:$DOCKER_SHA_TAG ..."
+          docker pull "$DOCKER_IMAGE:$DOCKER_SHA_TAG"
+
+          # Point docker-compose at this specific image for this deploy
+          export IMAGE_TAG="$DOCKER_SHA_TAG"
+
+          # ── Recreate containers ─────────────────────────────────────────────
+          # --force-recreate  → always replace containers even if config unchanged
+          # --remove-orphans  → remove leftover containers from old services
+          # --pull never      → we already pulled manually above; skip redundant pull
+          echo "🔄 Recreating containers..."
+          IMAGE_TAG="$IMAGE_TAG" docker-compose up -d \
+            --force-recreate \
+            --remove-orphans \
+            --no-build
+
+          # ── Cleanup old images ──────────────────────────────────────────────
+          echo "🧹 Pruning dangling images..."
           docker image prune -f
-          
-          # Show running containers
+
+          # ── Status check ────────────────────────────────────────────────────
+          echo ""
+          echo "📋 Running containers:"
           docker-compose ps
-          
-          # Check logs for errors
+
+          echo ""
+          echo "📜 Last 50 log lines:"
           docker-compose logs --tail=50
-          
-          # Health check (optional)
-          sleep 10
-          if curl -f http://localhost:${{ secrets.PORT || 5000 }}/health; then
-            echo "✅ Application started successfully"
+
+          # ── Health check ────────────────────────────────────────────────────
+          APP_PORT="${PORT:-5000}"
+          echo ""
+          echo "🏥 Health check on port $APP_PORT ..."
+          sleep 15
+          if curl -fsS "http://localhost:$APP_PORT/health" > /dev/null; then
+            echo "✅ Application is healthy"
           else
-            echo "⚠️ Application might have issues, check logs above"
+            echo "❌ Health check failed — rolling back to previous image"
+            # Rollback: bring up the stable tag again
+            IMAGE_TAG="${{ env.DOCKER_STABLE_TAG }}" docker-compose up -d --force-recreate
+            exit 1
           fi
-          
-          echo "Deployment completed at $(date)"
+
+          echo ""
+          echo "🎉 Deployment completed at $(date)"
+      env:
+        DOCKER_IMAGE: ${{ env.DOCKER_IMAGE }}
+        DOCKER_SHA_TAG: ${{ env.DOCKER_SHA_TAG }}
