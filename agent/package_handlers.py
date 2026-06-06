@@ -78,6 +78,7 @@ def fetch_packages(context: Dict, tools: TravelTools, state) -> Dict:
         context["packages_list"] = matched
         if matched:
             context["step"] = "pkg_show_packages"
+            context["packages_page"] = 0
             save_context(state, context)
             return card_pkg_packages(context)
         
@@ -153,8 +154,11 @@ def fetch_package_vehicles(context: Dict, tools: TravelTools, state) -> Dict:
             }
 
         context["vehicles_list"] = normalised
+        if context.get("vehicles_page") is None:
+            context["vehicles_page"] = 0
         context["step"]          = "pkg_ask_vehicle"
         save_context(state, context)
+        context["vehicles_page"] = 0
         return card_vehicles_list(context)
 
     except Exception as e:
@@ -473,18 +477,24 @@ def confirm_package_booking(context: Dict, phone: str, business_phone: str, stat
     pkg_name = context.get("selected_package", {}).get("package_name", "Package")
     ref      = f"PKG{datetime.now().strftime('%Y%m%d%H%M%S')}"
     logger.info(f"✅ PACKAGE BOOKING CONFIRMED: {ref}")
-    reset_fn(phone, business_phone, state)
+
+    # store reset_fn reference so post-booking handlers can use it
+    context["step"] = "pkg_post_booking"
+    save_context(state, context)
+
     return {
-        "type": "text",
+        "type": "buttons",
         "content": (
             f"✅ *BOOKING CONFIRMED!* 🎉\n\n"
             f"📦 *Package:* {pkg_name}\n"
             f"💵 *Total:* {total_str}\n"
             f"🔖 *Reference:* {ref}\n\n"
-            f"Thank you for booking with us!\n"
-            f"Have a wonderful trip. ✈️\n\n"
-            f"Now to start a new booking!"
+            f"What would you like to do next?"
         ),
+        "buttons": [
+            {"text": "📄 Generate PDF", "value": "pkg_generate_pdf"},
+            {"text": "❌ Exit",          "value": "pkg_exit"},
+        ],
     }
 
 
@@ -492,9 +502,9 @@ def confirm_package_booking(context: Dict, phone: str, business_phone: str, stat
 # GENERATE AND SEND PDF
 # ─────────────────────────────────────────────────────────────
 
-def generate_and_send_pdf(context: Dict, phone: str, business_phone: str, state) -> Dict:
+def generate_and_send_pdf(context: Dict, phone: str, business_phone: str, state, reset_fn=None) -> Dict:
     from datetime import datetime
-    from services.pdf_generator import generate_package_pdf, send_pdf_via_whatsapp
+    from services.pdf_generator import generate_package_pdf, send_pdf_via_whatsapp, fetch_company_info
     from database.database import get_whatsapp_config
 
     pkg = context.get("selected_package", {})
@@ -504,18 +514,26 @@ def generate_and_send_pdf(context: Dict, phone: str, business_phone: str, state)
     pkg_name = pkg.get("package_name") or pkg.get("title", "package")
     safe_name = "".join(c for c in pkg_name[:30] if c.isalnum() or c in (" ", "-", "_")).rstrip()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
+
     os.makedirs("generated_pdfs", exist_ok=True)
     pdf_path = f"generated_pdfs/{safe_name}_{timestamp}.pdf"
 
     try:
+        # ── Fetch company info from API ──────────────────────────
+        company_info = fetch_company_info(business_phone)
+
         # Generate PDF
-        generate_package_pdf(package_data=pkg, context=context, output_path=pdf_path)
-        
+        generate_package_pdf(
+            package_data=pkg,
+            context=context,
+            output_path=pdf_path,
+            company_info=company_info,        # ← NEW
+        )
+
         # Get sender config
         sender_config = get_whatsapp_config(business_phone)
         sender_phone_number_id = sender_config.get("phone_number_id") if sender_config else None
-        
+
         # Send via WhatsApp
         caption = f"📄 *{pkg_name}* - Travel Package Details\n\n✅ *PDF Generated Successfully!*"
         result = send_pdf_via_whatsapp(
@@ -524,11 +542,36 @@ def generate_and_send_pdf(context: Dict, phone: str, business_phone: str, state)
             caption=caption,
             sender_phone_number_id=sender_phone_number_id,
         )
-        
+
         if result:
-            return {"type": "buttons", "buttons": [{"text": "BOOK NOW", "value": "pkg_book_now"}]}
-        return {"type": "text", "content": "⚠️ *PDF Generation Failed*\n\nPlease try again or click BOOK NOW."}
-        
+            if reset_fn:
+                reset_fn(phone, business_phone, state)
+            return {
+                "type": "text",
+                "content": (
+                    f"📄 *PDF Generated Successfully!*\n\n"
+                    f"Your travel package details have been sent to your WhatsApp.\n\n"
+                    f"Thank you for booking with us! Have a wonderful trip. ✈️\n\n"
+                    f"Now to start a new booking!"
+                ),
+            }
+
+        return {
+            "type": "buttons",
+            "content": "⚠️ *PDF could not be sent.*\n\nWould you like to try again?",
+            "buttons": [
+                {"text": "🔄 Retry PDF", "value": "pkg_generate_pdf"},
+                {"text": "❌ Exit",       "value": "pkg_exit"},
+            ],
+        }
+
     except Exception as e:
         logger.error(f"generate_and_send_pdf error: {e}")
-        return {"type": "text", "content": f"❌ *Error generating PDF:* {str(e)}"}
+        return {
+            "type": "buttons",
+            "content": f"❌ *Error generating PDF:* {str(e)}\n\nWould you like to try again?",
+            "buttons": [
+                {"text": "🔄 Retry PDF", "value": "pkg_generate_pdf"},
+                {"text": "❌ Exit",       "value": "pkg_exit"},
+            ],
+        }

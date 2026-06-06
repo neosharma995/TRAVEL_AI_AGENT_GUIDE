@@ -74,12 +74,24 @@ def save_or_update_whatsapp_number(phone_number_id, metadata=None):
         return new_record, True
 
 
-def get_whatsapp_config(phone_number_id):
-    """Get WhatsApp configuration from database"""
+def get_whatsapp_config(identifier):
+    """Works with phone_number_id OR display_number"""
+    # Try by phone_number_id first
     config = whatsapp_numbers.find_one({
-        "phone_number_id": phone_number_id,
+        "phone_number_id": identifier,
         "is_active": True
     })
+    
+    # If not found, try by display_number
+    if not config:
+        normalized = normalize_phone_number(identifier)
+        config = whatsapp_numbers.find_one({
+            "$or": [
+                {"display_number": normalized},
+                {"display_phone_number_raw": normalized}
+            ],
+            "is_active": True
+        })
     
     if not config:
         return None

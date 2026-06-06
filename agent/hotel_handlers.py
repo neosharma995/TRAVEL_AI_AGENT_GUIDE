@@ -58,6 +58,7 @@ def proceed_to_categories(context: Dict, tools: TravelTools, state, execute_tool
 def handle_view_rooms(hotel_name: str, context: Dict, tools: TravelTools, state, execute_tool_fn) -> Dict:
     """Fetch rooms for a hotel and show room cards."""
     context["selected_hotel"] = hotel_name
+    context["hotel_page"] = 0
     result = execute_tool_fn("get_hotel_rooms", {"hotel_name": hotel_name}, tools)
     
     if result.get("success") and result.get("rooms"):
@@ -65,6 +66,7 @@ def handle_view_rooms(hotel_name: str, context: Dict, tools: TravelTools, state,
         context["meal_plan_data"] = result.get("meal_plan", {})
         context["hotel_tax"]      = result.get("tax", "0")
         context["step"]           = "show_rooms"
+        context["rooms_page"] = 0
         save_context(state, context)
         return format_rooms(context)
 
@@ -211,5 +213,6 @@ def handle_change_city(context: Dict, state) -> Dict:
               "price_details", "categories_from_api"):
         context[k] = None
     context["step"] = "collect_info"
+    context["hotel_page"] = 0
     save_context(state, context)
     return {"type": "text", "content": "Which city would you like to search hotels in?"}

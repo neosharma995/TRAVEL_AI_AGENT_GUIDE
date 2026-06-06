@@ -72,12 +72,17 @@ def register_chat_routes(app):
 
     @app.route('/get-chats', methods=['GET', 'OPTIONS'])
     def get_chats():
-        """Get chat history for a user"""
+        """Get chat history for a user with pagination"""
         if request.method == 'OPTIONS':
             return '', 200
             
         user_phone = request.args.get("user_phone")
         display_phone_number = request.args.get("display_phone_number")
+        
+        # Pagination parameters
+        page = int(request.args.get("page", 1))
+        limit = int(request.args.get("limit", 50))  # Load 50 messages at a time
+        skip = (page - 1) * limit
 
         if not user_phone:
             return jsonify({"error": "user_phone is required"}), 400
@@ -87,15 +92,29 @@ def register_chat_routes(app):
             normalized = normalize_phone_number(display_phone_number)
             query["display_phone_number_raw"] = normalized
         
-        chats = list(messages.find(query).sort("timestamp", 1))
+        # Get total count
+        total_count = messages.count_documents(query)
+        
+        # Get paginated messages (latest first, then reverse for chronological order)
+        chats = list(messages.find(query).sort("timestamp", -1).skip(skip).limit(limit))
+        
+        # Reverse to get chronological order (oldest first)
+        chats.reverse()
 
         for c in chats:
             c["_id"] = str(c["_id"])
+            # Convert datetime to string for JSON serialization
+            if "timestamp" in c and c["timestamp"]:
+                c["timestamp"] = c["timestamp"].isoformat()
 
         return jsonify({
             "success": True,
             "chats": chats,
-            "count": len(chats)
+            "count": len(chats),
+            "total": total_count,
+            "page": page,
+            "limit": limit,
+            "total_pages": (total_count + limit - 1) // limit
         })
 
     @app.route('/send-message', methods=['POST', 'OPTIONS'])
