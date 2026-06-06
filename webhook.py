@@ -37,7 +37,9 @@ CORS(
     app,
     resources={r"/*": {"origins": "*"}},
     supports_credentials=True,
-    allow_headers=["Content-Type", "Authorization", "ngrok-skip-browser-warning"]
+    allow_headers=["Content-Type", "Authorization", "ngrok-skip-browser-warning"],
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],  
+    automatic_options=True    
 )
 
   
@@ -229,15 +231,18 @@ app.emit_new_message = emit_new_message
 
 # ── CORS HEADERS ──────────────────────────────────────────────────────────────
 
-@app.after_request
-def after_request(response):
-    response.headers.update({
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, ngrok-skip-browser-warning',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-        'Access-Control-Allow-Credentials': 'true',
-    })
-    return response
+@app.before_request
+def handle_preflight():
+    if request.method == 'OPTIONS':
+        response = app.make_default_options_response()
+        response.headers.update({
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, ngrok-skip-browser-warning',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+            'Access-Control-Allow-Credentials': 'true',
+            'Access-Control-Max-Age': '3600',
+        })
+        return response
 
 
 # ── REGISTER ROUTES ───────────────────────────────────────────────────────────
@@ -511,12 +516,9 @@ def health():
 def queue_stats():
     return jsonify(user_queue_manager.stats())
 
-@app.route('/plan/status', methods=['GET', 'OPTIONS'])
+@app.route('/plan/status', methods=['GET'])    
 def plan_status():
-    """Frontend polls this to know if plan is active or expired."""
-    if request.method == 'OPTIONS':
-        return '', 200
-
+    
     try:
         from plan_checker import is_bot_allowed
         owner_phone = request.args.get('owner_phone')

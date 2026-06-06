@@ -69,36 +69,23 @@ jobs:
           fi
 
           cat > .env << 'ENVEOF'
-          # API Keys
           OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-
-          # WhatsApp / Meta
           ACCESS_TOKEN=${{ secrets.ACCESS_TOKEN }}
           VERIFY_TOKEN=${{ secrets.VERIFY_TOKEN }}
-
-          # WordPress API
           WP_API_BASE=${{ secrets.WP_API_BASE }}
-
-          # Flask
           SECRET_KEY=${{ secrets.SECRET_KEY }}
           DEBUG_MODE=${{ secrets.DEBUG_MODE }}
-
-          # MongoDB
           MONGODB_USER=${{ secrets.MONGODB_USER }}
           MONGODB_PASS=${{ secrets.MONGODB_PASS }}
           MONGODB_HOST=mongodb
           MONGODB_PORT=27017
-
-          # Email
           SMTP_HOST=${{ secrets.SMTP_HOST }}
           SMTP_PORT=${{ secrets.SMTP_PORT }}
           SMTP_USER=${{ secrets.SMTP_USER }}
           SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
           ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}
           FROM_EMAIL=${{ secrets.FROM_EMAIL }}
-
-          # App Port
-          PORT=${{ secrets.PORT || 5000 }}
+          PORT=${{ secrets.PORT }}
           ENVEOF
 
           echo "✅ .env written"
