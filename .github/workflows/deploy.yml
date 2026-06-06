@@ -32,8 +32,6 @@ jobs:
       with:
         context: .
         push: true
-        # Push BOTH a stable tag and a unique SHA tag.
-        # The SHA tag busts the Docker cache on VPS every single deploy.
         tags: |
           ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_STABLE_TAG }}
           ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_SHA_TAG }}
@@ -52,10 +50,9 @@ jobs:
         username: ${{ secrets.VPS_USER }}
         key: ${{ secrets.VPS_SSH_KEY }}
         port: ${{ secrets.VPS_PORT || 22 }}
-        # Pass the SHA tag into the remote shell via envs
         envs: DOCKER_IMAGE,DOCKER_SHA_TAG
         script: |
-          set -e  # Exit immediately on any error
+          set -e
 
           echo "🚀 Starting deployment at $(date)"
           echo "📦 Image: $DOCKER_IMAGE:$DOCKER_SHA_TAG"
@@ -68,43 +65,38 @@ jobs:
             echo "✅ .env backed up"
           fi
 
-          cat > .env << 'ENVEOF'
-          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          ACCESS_TOKEN=${{ secrets.ACCESS_TOKEN }}
-          VERIFY_TOKEN=${{ secrets.VERIFY_TOKEN }}
-          WP_API_BASE=${{ secrets.WP_API_BASE }}
-          SECRET_KEY=${{ secrets.SECRET_KEY }}
-          DEBUG_MODE=${{ secrets.DEBUG_MODE }}
-          MONGODB_USER=${{ secrets.MONGODB_USER }}
-          MONGODB_PASS=${{ secrets.MONGODB_PASS }}
-          MONGODB_HOST=mongodb
-          MONGODB_PORT=27017
-          SMTP_HOST=${{ secrets.SMTP_HOST }}
-          SMTP_PORT=${{ secrets.SMTP_PORT }}
-          SMTP_USER=${{ secrets.SMTP_USER }}
-          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
-          ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}
-          FROM_EMAIL=${{ secrets.FROM_EMAIL }}
-          PORT=${{ secrets.PORT }}
-          ENVEOF
+cat > .env << 'ENVEOF'
+OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+ACCESS_TOKEN=${{ secrets.ACCESS_TOKEN }}
+VERIFY_TOKEN=${{ secrets.VERIFY_TOKEN }}
+WP_API_BASE=${{ secrets.WP_API_BASE }}
+SECRET_KEY=${{ secrets.SECRET_KEY }}
+DEBUG_MODE=${{ secrets.DEBUG_MODE }}
+MONGODB_USER=${{ secrets.MONGODB_USER }}
+MONGODB_PASS=${{ secrets.MONGODB_PASS }}
+MONGODB_HOST=mongodb
+MONGODB_PORT=27017
+SMTP_HOST=${{ secrets.SMTP_HOST }}
+SMTP_PORT=${{ secrets.SMTP_PORT }}
+SMTP_USER=${{ secrets.SMTP_USER }}
+SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}
+FROM_EMAIL=${{ secrets.FROM_EMAIL }}
+PORT=${{ secrets.PORT }}
+ENVEOF
 
           echo "✅ .env written"
 
           # ── Pull the exact SHA-tagged image ────────────────────────────────
-          # Using the SHA tag guarantees Docker downloads the new image
-          # even if the registry still serves 'web-prod' from cache.
           echo "📥 Pulling image $DOCKER_IMAGE:$DOCKER_SHA_TAG ..."
           docker pull "$DOCKER_IMAGE:$DOCKER_SHA_TAG"
 
-          # Point docker-compose at this specific image for this deploy
           export IMAGE_TAG="$DOCKER_SHA_TAG"
 
           # ── Recreate containers ─────────────────────────────────────────────
-          # --force-recreate  → always replace containers even if config unchanged
-          # --remove-orphans  → remove leftover containers from old services
-          # --pull never      → we already pulled manually above; skip redundant pull
+          # Uses 'docker compose' (v2 plugin) — NOT 'docker-compose' (v1 standalone)
           echo "🔄 Recreating containers..."
-          IMAGE_TAG="$IMAGE_TAG" docker-compose up -d \
+          IMAGE_TAG="$IMAGE_TAG" docker compose up -d \
             --force-recreate \
             --remove-orphans \
             --no-build
@@ -116,23 +108,26 @@ jobs:
           # ── Status check ────────────────────────────────────────────────────
           echo ""
           echo "📋 Running containers:"
-          docker-compose ps
+          docker compose ps
 
           echo ""
           echo "📜 Last 50 log lines:"
-          docker-compose logs --tail=50
+          docker compose logs --tail=50
 
           # ── Health check ────────────────────────────────────────────────────
-          APP_PORT="${PORT:-5000}"
+          # Read PORT from .env — $PORT shell var is NOT set in SSH context
+          APP_PORT=$(grep -E '^PORT=' .env | cut -d'=' -f2 | tr -d ' ' | head -1)
+          APP_PORT="${APP_PORT:-5000}"
+
           echo ""
           echo "🏥 Health check on port $APP_PORT ..."
           sleep 15
+
           if curl -fsS "http://localhost:$APP_PORT/health" > /dev/null; then
             echo "✅ Application is healthy"
           else
             echo "❌ Health check failed — rolling back to previous image"
-            # Rollback: bring up the stable tag again
-            IMAGE_TAG="${{ env.DOCKER_STABLE_TAG }}" docker-compose up -d --force-recreate
+            IMAGE_TAG="web-prod" docker compose up -d --force-recreate
             exit 1
           fi
 
