@@ -355,20 +355,32 @@ def calculate_and_show_price(context: Dict, tools: TravelTools, state) -> Dict:
         # ─────────────────────────────────────────────────────────
         # STEP 3: User-selected vehicle cost (only vehicle_include days)
         # ─────────────────────────────────────────────────────────
+        import math as _math
+        import re as _re
+
         vehicle_price         = 0
         vehicle_price_per_day = 0
         vehicle_name          = "None"
         vehicle_season_name   = "Regular Rate"
+        vehicles_needed       = 1
 
         if vehicle and vehicle_days > 0:
+            # Parse seater capacity — handles "2 Members", "6 Seater", "8", etc.
+            capacity_str  = vehicle.get("seater_capacity", "")
+            cap_match     = _re.search(r'\d+', str(capacity_str))
+            capacity      = int(cap_match.group()) if cap_match else 1
+            vehicles_needed = _math.ceil(guests / capacity) if capacity > 0 else 1
+
             vehicle_name          = vehicle.get("name", "Unknown")
             v_base, v_season      = get_vehicle_seasonal_price(vehicle, check_in_dt, check_out_dt)
-            vehicle_price_per_day = v_base
-            vehicle_price         = v_base * vehicle_days
+            vehicle_price_per_day = v_base * vehicles_needed   # total per day (all vehicles)
+            vehicle_price         = vehicle_price_per_day * vehicle_days
             vehicle_season_name   = v_season
+
             logger.info(
-                f"🚗 Vehicle={vehicle_name} Season={vehicle_season_name} "
-                f"Price/day={v_base} Days={vehicle_days} Total={vehicle_price}"
+                f"🚗 Vehicle={vehicle_name} Capacity={capacity} Guests={guests} "
+                f"VehiclesNeeded={vehicles_needed} BasePrice/day={v_base} "
+                f"TotalPerDay={vehicle_price_per_day} Days={vehicle_days} Total={vehicle_price}"
             )
 
         # ─────────────────────────────────────────────────────────
@@ -400,6 +412,8 @@ def calculate_and_show_price(context: Dict, tools: TravelTools, state) -> Dict:
             else:
                 ev_price       = base_price
                 ev_season_name = "Regular Rate"
+
+            ev_price = ev_price * guests  
 
             embedded_vehicle_costs.append({
                 "day":          ev["day"],
@@ -440,6 +454,7 @@ def calculate_and_show_price(context: Dict, tools: TravelTools, state) -> Dict:
             "vehicle_price":           vehicle_price,
             "vehicle_price_per_day":   vehicle_price_per_day,
             "vehicle_days":            vehicle_days,
+            "vehicles_needed":         vehicles_needed,
             "vehicle_season_name":     vehicle_season_name,
             "vehicle_name":            vehicle_name,
             "embedded_vehicle_costs":  embedded_vehicle_costs,

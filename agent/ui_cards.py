@@ -2,6 +2,7 @@ from typing import Dict, List, Optional
 import json
 import requests
 import os
+import math
 WP_API_BASE = os.getenv("WP_API_BASE")
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -442,7 +443,8 @@ def card_pkg_summary(context: Dict) -> Dict:
     selected_hotels = pd.get("selected_hotels", {})
     hotel_costs    = pd.get("hotel_costs", [])
     embedded_vehicle_costs = pd.get("embedded_vehicle_costs", [])
-    total_embedded_price   = pd.get("total_embedded_price", 0)
+    vehicles_needed        = pd.get("vehicles_needed", 1)
+
 
     pkg       = context.get("selected_package", {})
     pkg_name  = pkg.get("package_name") or pkg.get("title", "Package")
@@ -568,14 +570,22 @@ def card_pkg_summary(context: Dict) -> Dict:
     content += _row("MAP Meal (Breakfast + Dinner)", fp(total_map))
 
     if vehicle_price > 0:
-        v_line = f"{fp(vehicle_per_day)}/day × {vehicle_days} days = {fp(vehicle_price)}"
-        if vehicle_season and vehicle_season not in ("Regular Rate", ""):
-            v_line += f"  _(Season: {vehicle_season})_"
-        content += _row(f"Vehicle Cost ({vehicle_name})", v_line)
+            vehicles_needed  = pd.get("vehicles_needed", 1)
+            price_per_single = vehicle_per_day / vehicles_needed if vehicles_needed > 0 else vehicle_per_day
+            if vehicles_needed > 1:
+                v_line = (
+                    f"{fp(price_per_single)}/day × {vehicles_needed} vehicles "
+                    f"× {vehicle_days} days = {fp(vehicle_price)}"
+                )
+            else:
+                v_line = f"{fp(vehicle_per_day)}/day × {vehicle_days} days = {fp(vehicle_price)}"
+            if vehicle_season and vehicle_season not in ("Regular Rate", ""):
+                v_line += f"  _(Season: {vehicle_season})_"
+            content += _row(f"Vehicle Cost ({vehicle_name})", v_line)
 
     if embedded_vehicle_costs:
         for ev in embedded_vehicle_costs:
-            ev_line = f"{fp(ev['price'])}"
+            ev_line = f"{fp(ev['price'] / guests)} × {guests} guests = {fp(ev['price'])}"
             if ev.get("season_name") not in ("Regular Rate", ""):
                 ev_line += f"  _(Season: {ev['season_name']})_"
             content += _row(f"{ev['day']} Transport ({ev['name']})", ev_line)
@@ -619,75 +629,74 @@ def card_pkg_summary(context: Dict) -> Dict:
 
 
 def card_vehicles_list(context: Dict) -> Dict:
-    """Vehicle listing - same pattern as card_hotel_rooms."""
     all_vehicles = context.get("vehicles_list", [])
     page         = context.get("vehicles_page", 0)
     start        = page * PAGE_SIZE
     end          = start + PAGE_SIZE
     vehicles     = all_vehicles[start:end]
     has_more     = end < len(all_vehicles)
-    check_in_str     = context.get("check_in", "")
+    check_in_str = context.get("check_in", "")
+    guests       = context.get("guests", 1)
 
     def get_vehicle_seasonal_price(vehicle: Dict, check_in_date: str) -> tuple:
         from datetime import datetime
-        
         raw_price  = vehicle.get("price", vehicle.get("vehicle_price", "0"))
         base_price = float(str(raw_price).replace(",", ""))
         if not check_in_date:
             return base_price, "Standard Rate"
         try:
             check_in = datetime.strptime(check_in_date, "%Y-%m-%d")
-            seasons  = vehicle.get("seasons", [])
-            for season in seasons:
-                start_date_str = season.get("starting_date", "")
-                end_date_str   = season.get("end_date", "")
-                if not start_date_str or not end_date_str:
+            for season in vehicle.get("seasons", []):
+                start_str = season.get("starting_date", "")
+                end_str   = season.get("end_date", "")
+                if not start_str or not end_str:
                     continue
                 try:
-                    season_start = datetime.strptime(start_date_str, "%d-%m-%Y")
-                    season_end   = datetime.strptime(end_date_str,   "%d-%m-%Y")
-                    if season_start <= check_in <= season_end:
-                        season_price = float(str(season.get("price", base_price)).replace(",", ""))
-                        season_name  = season.get("season_name", "Seasonal Rate")
-                        return season_price, season_name
+                    if datetime.strptime(start_str, "%d-%m-%Y") <= check_in <= datetime.strptime(end_str, "%d-%m-%Y"):
+                        return float(str(season.get("price", base_price)).replace(",", "")), season.get("season_name", "Seasonal Rate")
                 except ValueError:
                     continue
             return base_price, "Standard Rate"
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(f"Vehicle season price error: {e}")
+        except Exception:
             return base_price, "Standard Rate"
+
+    def parse_capacity(capacity_str) -> int:
+        """Extract integer from '2 Members', '6 Seater', '8', etc."""
+        import re
+        if not capacity_str:
+            return 1
+        match = re.search(r'\d+', str(capacity_str))
+        return int(match.group()) if match else 1
 
     responses = []
 
     for i, vehicle in enumerate(vehicles):
-        name      = vehicle.get("name", "Vehicle")
-        capacity  = vehicle.get("seater_capacity", "")
-        image_url = vehicle.get("image", "")
+        name          = vehicle.get("name", "Vehicle")
+        capacity_str  = vehicle.get("seater_capacity", "")
+        capacity      = parse_capacity(capacity_str)
+        price, season = get_vehicle_seasonal_price(vehicle, check_in_str)
+        vehicles_needed = math.ceil(guests / capacity) if capacity > 0 else 1
+        total_price     = price * vehicles_needed
 
-        price, season_name = get_vehicle_seasonal_price(vehicle, check_in_str)
+        text  = f"*{name}*\n"
+        text += f"*Capacity:* {capacity_str}\n"
+
+        if season not in ("Standard Rate", "Regular Rate", ""):
+            text += f"*Season:* {season}\n"
 
         
-        caption  = f"*{name}*\n"
-        caption += f"*Capacity:* {capacity} seater\n"
-       
+        if vehicles_needed > 1:
+            text += f"\n⚠️ *{guests} guests need {vehicles_needed} vehicles* ({capacity} seater × {vehicles_needed})\n"
+        elif capacity > guests * 1.5:
+            # Vehicle is much larger than needed — suggest it but note the extra space
+            text += f"\n💡 *This vehicle has extra space* for {capacity} people, you have {guests} guests.\n"
 
-        if image_url and image_url.startswith(('http://', 'https://')):
-            responses.append({
-                "type": "image",
-                "content": image_url,
-                "caption": caption,
-                "buttons": [{"text": "Select Vehicle", "value": f"select_vehicle_{i}"}]
-            })
-        else:
-            text_content  = f"*{name}*\n"
-            text_content += f"*Capacity:* {capacity} seater\n"
- 
-            responses.append({
-                "type": "buttons",
-                "content": text_content,
-                "buttons": [{"text": "Select Vehicle", "value": f"select_vehicle_{i}"}]
-            })
+        responses.append({
+            "type":    "buttons",
+            "content": text,
+            "buttons": [{"text": f"Pick Vehicle", "value": f"select_vehicle_{start + i}"}]
+        })
+
     if has_more:
         responses.append({
             "type": "buttons",
@@ -697,6 +706,5 @@ def card_vehicles_list(context: Dict) -> Dict:
                 {"text": "Other Packages",     "value": "pkg_other_packages"},
             ]
         })
- 
 
     return {"type": "multi", "responses": responses}
