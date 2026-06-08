@@ -10,7 +10,6 @@ import os
 from dotenv import load_dotenv
 from plan_checker import is_bot_allowed, get_expired_response
 
-
 load_dotenv('.env')
 
 # REMOVE this line - NO MORE in-memory dictionary
