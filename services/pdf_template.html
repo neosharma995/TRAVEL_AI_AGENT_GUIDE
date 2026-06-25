@@ -23,6 +23,15 @@
             height: 300px;
             object-fit: contain;
         }
+        .links_outer {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    text-decoration: none;
+}
+a.links {
+    text-decoration-color: #c9a84c;
+}
 
         .pdf-page {
             width: 210mm;
@@ -929,7 +938,7 @@
     <div style="margin-bottom:14px;padding:10px 14px;background:#f8f5ee;
                 border-radius:8px;border-left:4px solid #c9a84c;
                 display:flex;align-items:flex-start;gap:10px;">
-        <span style="font-size:20px;flex-shrink:0;">📍</span>
+        
         <div>
             <div style="font-size:20px;font-weight:700;color:#888;font-family:'Montserrat',sans-serif;
                         text-transform:uppercase;letter-spacing:1px;margin-bottom:3px;">
@@ -951,18 +960,13 @@
                 text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">
         🌐 Connect With Us
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+    <div class="links_outer">
         {% for link in social_links %}
         {% if link.social_link_name and link.social_link %}
         <a href="{{ link.social_link }}" 
            target="_blank"
-           style="display:inline-flex;align-items:center;gap:6px;
-                  padding:8px 16px;background:white;
-                  border:1px solid #c9a84c;border-radius:25px;
-                  text-decoration:none;color:#1a1a2e;
-                  font-size:13px;font-weight:600;
-                  font-family:'Montserrat',sans-serif;
-                  transition:all 0.3s;">
+           class="links"
+            >
             <span style="font-size:16px;">
                 {% if link.social_link_name|lower == 'youtube' %}▶️
                 {% elif link.social_link_name|lower == 'instagram' %}📸
