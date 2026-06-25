@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 
-WP_API_BASE = os.getenv("WP_API_BASE", "https://silver-spoonbill-286441.hostingersite.com/wp-json/hm/v1")
+WP_API_BASE = os.getenv("WP_API_BASE")
 
 def fetch_company_info(business_phone: str) -> dict:
     """Fetch company name, logo, and bank details from the about-us API."""
@@ -37,6 +37,8 @@ def fetch_company_info(business_phone: str) -> dict:
                 "ifsc_code":            a.get("ifsc_code", ""),
                 "upi_id":               a.get("upi_id", ""),
                 "qr_code_image":        a.get("qr_code_image", ""),
+                "address":              a.get("address", ""),       # ✅ ADD
+                "social_links":         a.get("social_links", []), # ✅ ADD
             }
     except Exception as e:
         logger.warning(f"fetch_company_info failed: {e}")
@@ -44,6 +46,8 @@ def fetch_company_info(business_phone: str) -> dict:
         "company_name": "Travel Co.", "company_logo": "",
         "bank_name": "", "account_holder_name": "", "account_number": "",
         "account_type": "", "ifsc_code": "", "upi_id": "", "qr_code_image": "",
+        "address": "",        # ✅ ADD
+        "social_links": [],   # ✅ ADD
     }
 
 def _fp(price) -> str:
@@ -149,6 +153,8 @@ def generate_package_pdf(
             "company_name": "Travel Co.", "company_logo": "",
             "bank_name": "", "account_holder_name": "", "account_number": "",
             "account_type": "", "ifsc_code": "", "upi_id": "", "qr_code_image": "",
+            "address": "",        # ✅ ADD
+            "social_links": [],   # ✅ ADD
         }
 
     # ── Load template ────────────────────────────────────────────────────────
@@ -279,6 +285,8 @@ def generate_package_pdf(
         "ifsc_code":           company_info["ifsc_code"],
         "upi_id":              company_info["upi_id"],
         "qr_code_image":       qr_b64,
+        "company_address":     company_info.get("address", ""),      # ✅ ADD
+        "social_links":        company_info.get("social_links", []), # ✅ ADD
     }
 
     # ── Render HTML ──────────────────────────────────────────────────────────
@@ -430,7 +438,13 @@ def generate_and_send_pdf_v2(
         os.makedirs("generated_pdfs", exist_ok=True)
         pdf_path = f"generated_pdfs/{safe_name}_{timestamp}.pdf"
 
-        generate_package_pdf(package_data=pkg, context=context, output_path=pdf_path)
+        company_info = fetch_company_info(business_phone)
+        generate_package_pdf(
+            package_data=pkg,
+            context=context,
+            output_path=pdf_path,
+            company_info=company_info,
+        )
 
         sender_config = get_whatsapp_config(business_phone)
         sender_phone_number_id = sender_config.get("phone_number_id") if sender_config else None

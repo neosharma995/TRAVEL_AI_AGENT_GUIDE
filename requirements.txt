@@ -19,4 +19,4 @@ pdfkit
 requests
 pillow
 openai
-weasyprint           
+weasyprint 
