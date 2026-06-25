@@ -482,30 +482,43 @@ def calculate_and_show_price(context: Dict, tools: TravelTools, state) -> Dict:
 # ─────────────────────────────────────────────────────────────
 
 def confirm_package_booking(context: Dict, phone: str, business_phone: str, state, reset_fn) -> Dict:
-    pd          = context.get("pkg_price_details", {})
+    pd = context.get("pkg_price_details", {})
     total_price = pd.get("total_price", 0)
+    tax_rate = float(str(pd.get("tax", "0")).replace("%", "") or 0)
+    
+    tax_amount = round(total_price * tax_rate / 100) if tax_rate > 0 else 0
+    final_total = total_price + tax_amount
+    
     try:
         total_str = fp(total_price)
+        tax_str = fp(tax_amount)
+        final_str = fp(final_total)
     except (ValueError, TypeError):
         total_str = f"Rs.{total_price}"
+        tax_str = f"Rs.{tax_amount}"
+        final_str = f"Rs.{final_total}"
 
     pkg_name = context.get("selected_package", {}).get("package_name", "Package")
-    ref      = f"PKG{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    ref = f"PKG{datetime.now().strftime('%Y%m%d%H%M%S')}"
     logger.info(f"✅ PACKAGE BOOKING CONFIRMED: {ref}")
 
-    # store reset_fn reference so post-booking handlers can use it
     context["step"] = "pkg_post_booking"
     save_context(state, context)
 
+    content = f"✅ *BOOKING CONFIRMED!* 🎉\n\n"
+    content += f"📦 *Package:* {pkg_name}\n"
+    
+    content += f"💰 *Subtotal:* {total_str}\n"
+    if tax_rate > 0:
+        content += f"🧾 *GST ({int(tax_rate)}%):* {tax_str}\n"
+    content += f"💵 *Total Payable:* {final_str}\n\n"
+    
+    content += f"🔖 *Reference:* {ref}\n\n"
+    content += f"What would you like to do next?"
+
     return {
         "type": "buttons",
-        "content": (
-            f"✅ *BOOKING CONFIRMED!* 🎉\n\n"
-            f"📦 *Package:* {pkg_name}\n"
-            f"💵 *Total:* {total_str}\n"
-            f"🔖 *Reference:* {ref}\n\n"
-            f"What would you like to do next?"
-        ),
+        "content": content,
         "buttons": [
             {"text": "📄 Generate PDF", "value": "pkg_generate_pdf"},
             {"text": "❌ Exit",          "value": "pkg_exit"},

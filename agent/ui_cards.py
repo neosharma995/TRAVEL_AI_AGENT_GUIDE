@@ -494,7 +494,7 @@ def card_pkg_summary(context: Dict) -> Dict:
     content += _row("Hotel Category", hotel_category)
     content += _row("Room Category",  room_category)
     if vehicle_price > 0:
-        content += _row("Vehicle", f"{vehicle_name}  ({fp(vehicle_per_day)}/day)")
+        content += _row("Vehicle", f"{vehicle_name}")
         if vehicle_season and vehicle_season not in ("Regular Rate", ""):
             content += _row("Vehicle Season", vehicle_season)
     else:
@@ -522,9 +522,7 @@ def card_pkg_summary(context: Dict) -> Dict:
 
         if ev:
             content += f"  *Transport:* {ev['name']}\n"
-            if ev.get("season_name") not in ("Regular Rate", ""):
-                content += f"  *Season:* {ev['season_name']}\n"
-            content += f"  *Cost:* {fp(ev['price'])}\n"
+
         else:
             if loc:
                 content += f"  *Location:* {loc}\n"
@@ -537,63 +535,9 @@ def card_pkg_summary(context: Dict) -> Dict:
 
         content += "\n"
 
-    # ── Price Details ─────────────────────────────────────────────
+    # ── Price Details (SIMPLIFIED — final price only) ─────────────
     content += _section_header("Price Details")
 
-    if hotel_costs:
-        for hc in hotel_costs:
-            loc        = hc.get("location", "")
-            h_name     = hc.get("hotel_name", "")
-            season_nm  = hc.get("season_name", "Regular Rate")
-            price_room = hc.get("price_per_room", 0)
-            rooms_n    = hc.get("rooms_needed", 0)
-            extra_p    = hc.get("extra_persons_total", 0)
-            extra_pr   = hc.get("extra_person_price", 0)
-            h_total    = hc.get("hotel_total", 0)
-            loc_nights = hc.get("nights", nights)
-
-            if price_room == 0 and rooms_n == 0 and h_total == 0:
-                content += f"*{loc}*\n"
-                content += f"  ⚠️ *No hotel found* with selected category\n"
-                content += f"  *Selected:* {hotel_category} - {room_category}\n"
-                content += f"  *Total Cost:* {fp(0)}\n"
-            else:
-                content += f"*{loc} — {h_name}*\n"
-                content += f"  Season: {season_nm}\n"
-                content += f"  Rs.{int(price_room):,}/night × {rooms_n} room(s) × {loc_nights} nights"
-                if extra_p > 0:
-                    content += f" + {extra_p} extra person(s) @ Rs.{int(extra_pr):,}/night"
-                content += f" = *{fp(h_total)}*\n"
-        content += "\n"
-
-    content += _row("Total Hotel Cost", fp(total_hotel))
-    content += _row("MAP Meal (Breakfast + Dinner)", fp(total_map))
-
-    if vehicle_price > 0:
-            vehicles_needed  = pd.get("vehicles_needed", 1)
-            price_per_single = vehicle_per_day / vehicles_needed if vehicles_needed > 0 else vehicle_per_day
-            if vehicles_needed > 1:
-                v_line = (
-                    f"{fp(price_per_single)}/day × {vehicles_needed} vehicles "
-                    f"× {vehicle_days} days = {fp(vehicle_price)}"
-                )
-            else:
-                v_line = f"{fp(vehicle_per_day)}/day × {vehicle_days} days = {fp(vehicle_price)}"
-            if vehicle_season and vehicle_season not in ("Regular Rate", ""):
-                v_line += f"  _(Season: {vehicle_season})_"
-            content += _row(f"Vehicle Cost ({vehicle_name})", v_line)
-
-    if embedded_vehicle_costs:
-        for ev in embedded_vehicle_costs:
-            ev_line = f"{fp(ev['price'] / guests)} × {guests} guests = {fp(ev['price'])}"
-            if ev.get("season_name") not in ("Regular Rate", ""):
-                ev_line += f"  _(Season: {ev['season_name']})_"
-            content += _row(f"{ev['day']} Transport ({ev['name']})", ev_line)
-
-    if package_margin > 0:
-        content += _row("Service Charge", fp(package_margin))
-
-    content += "\n"
     content += f"*Grand Total:  {fp(total_price)}*\n"
 
     tax_rate   = float(str(pd.get("tax", "0")).replace("%", "") or 0)
@@ -681,10 +625,6 @@ def card_vehicles_list(context: Dict) -> Dict:
         text  = f"*{name}*\n"
         text += f"*Capacity:* {capacity_str}\n"
 
-        if season not in ("Standard Rate", "Regular Rate", ""):
-            text += f"*Season:* {season}\n"
-
-        
         if vehicles_needed > 1:
             text += f"\n⚠️ *{guests} guests need {vehicles_needed} vehicles* ({capacity} seater × {vehicles_needed})\n"
         elif capacity > guests * 1.5:
