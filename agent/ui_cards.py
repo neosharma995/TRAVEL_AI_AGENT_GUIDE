@@ -62,9 +62,7 @@ def card_welcome(business_phone: str = "919816440734") -> Dict:
     }
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# HOTEL FLOW CARDS  (unchanged)
-# ═══════════════════════════════════════════════════════════════════════════════
+ 
 
 def card_hotel_categories(context: Dict, error_category: str = None) -> Dict:
     """Category selection card."""
