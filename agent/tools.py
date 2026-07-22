@@ -74,13 +74,14 @@ class TravelTools:
             response = self.session.get(CATEGORIES_API, timeout=30)
             response.raise_for_status()
             data = response.json()
+            partner_email = (data.get("user") or {}).get("email", "")
             if data and data.get("status") and data.get("data"):
                 categories = [{"name": cat.get("category_name")} for cat in data["data"]]
-                return {"success": True, "categories": categories}
-            return {"success": False, "error": "No categories found", "categories": []}
+                return {"success": True, "categories": categories, "partner_email": partner_email}
+            return {"success": False, "error": "No categories found", "categories": [], "partner_email": partner_email}
         except Exception as e:
             logger.error(f"Categories error: {e}")
-            return {"success": False, "error": str(e), "categories": []}
+            return {"success": False, "error": str(e), "categories": [], "partner_email": ""}
 
     # ── HOTELS BY CATEGORY ────────────────────────────────────────────────────
 
@@ -164,6 +165,7 @@ class TravelTools:
             response = self.session.get(ALL_HOTELS_API, params=params, timeout=30)
             response.raise_for_status()
             data = response.json()
+            partner_email = (data.get("user") or {}).get("email", "")
             all_hotels = data.get("hotels", [])
 
             search_name = hotel_name.replace("Hotel", "").strip().lower()
@@ -230,6 +232,7 @@ class TravelTools:
                 "total_rooms": len(formatted_rooms),
                 "hotel_gallery": selected.get("gallery", []),
                 "full_hotel_details": full_hotel_details,
+                "partner_email": partner_email,
             }
 
         except requests.exceptions.Timeout:
@@ -270,9 +273,10 @@ class TravelTools:
             response = self.session.get(PACKAGES_API, params=params, timeout=30)
             response.raise_for_status()
             data = response.json()
+            # Extract partner email from API user object
+            partner_email = (data.get("user") or {}).get("email", "") if isinstance(data, dict) else ""
             all_packages = data if isinstance(data, list) else data.get("packages", data.get("data", []))
 
-            
             search_terms = []
             if cities:
                 search_terms = [c.lower() for c in cities if c]
@@ -286,16 +290,15 @@ class TravelTools:
                         + p.get("title", "").lower()
                         + p.get("package_name", "").lower()
                     )
-                  
                     return any(term in pkg_text for term in search_terms)
 
                 matched = [p for p in all_packages if package_matches(p)]
-                return {"success": True, "packages": matched, "count": len(matched)}
+                return {"success": True, "packages": matched, "count": len(matched), "partner_email": partner_email}
 
-            return {"success": True, "packages": all_packages, "count": len(all_packages)}
+            return {"success": True, "packages": all_packages, "count": len(all_packages), "partner_email": partner_email}
         except Exception as e:
             logger.error(f"Packages error: {e}")
-            return {"success": False, "error": str(e), "packages": []}
+            return {"success": False, "error": str(e), "packages": [], "partner_email": ""}
 
    
 

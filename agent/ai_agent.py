@@ -157,8 +157,8 @@ class AIHotelAgent:
                     if step == "pkg_ask_vehicle":
                         return pkg.fetch_package_vehicles(context, tools, state)
             if missing:
-                return ask_for_field(missing, context)
-            return card_welcome()
+                return ask_for_field(missing, context, business_phone)
+            return card_welcome(business_phone)
         
         if msg == "exit_session":
              
@@ -175,7 +175,7 @@ class AIHotelAgent:
             ):
                 self._reset_to_welcome(phone, business_phone, state)
                 context = self.sessions[sk]["context"]
-                return card_welcome()
+                return card_welcome(business_phone)
 
         svc = context.get("service_type")
 
@@ -186,7 +186,7 @@ class AIHotelAgent:
             self._save(state, context)
             missing = get_missing_field(context)
             if missing and missing != "service_type":
-                return ask_for_field(missing, context)
+                return ask_for_field(missing, context, business_phone)
 
         # ════════════════════════════════════════════════════════
         #  HOTEL BUTTON HANDLERS
@@ -450,7 +450,7 @@ class AIHotelAgent:
                 logger.info(f"✅ Package start date: {context['check_in']}")
                 self._save(state, context)
                 if not context.get("guests"):
-                    return ask_for_field("guests", context)
+                    return ask_for_field("guests", context, business_phone)
                 return pkg.fetch_hotel_categories(context, tools, state)
 
             elif date_result.get("is_past"):
@@ -467,7 +467,7 @@ class AIHotelAgent:
                 if bare is not None and not context.get("guests"):
                     context["guests"] = bare
                     self._save(state, context)
-                    return ask_for_field("dates", context)
+                    return ask_for_field("dates", context, business_phone)
                 self._save(state, context)
                 return {
                     "type": "text",
@@ -563,7 +563,7 @@ class AIHotelAgent:
                 return pkg.fetch_hotel_categories(context, tools, state)
 
         if missing:
-            return ask_for_field(missing, context)
+            return ask_for_field(missing, context, business_phone)
 
         return card_welcome(business_phone)
 

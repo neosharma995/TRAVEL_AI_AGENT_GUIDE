@@ -74,6 +74,11 @@ def fetch_packages(context: Dict, tools: TravelTools, state) -> Dict:
         result = tools.get_packages(context["destination"], cities=cities)
         if not result.get("success"):
             return {"type": "text", "content": "Unable to fetch packages. Please try again."}
+        # Store partner email from API user object into context
+        partner_email = result.get("partner_email", "")
+        if partner_email and not context.get("partner_email"):
+            context["partner_email"] = partner_email
+            logger.info(f"📧 Stored partner_email from packages API: {partner_email}")
         matched = result.get("packages", [])
         context["packages_list"] = matched
         if matched:
@@ -501,6 +506,41 @@ def confirm_package_booking(context: Dict, phone: str, business_phone: str, stat
     pkg_name = context.get("selected_package", {}).get("package_name", "Package")
     ref = f"PKG{datetime.now().strftime('%Y%m%d%H%M%S')}"
     logger.info(f"✅ PACKAGE BOOKING CONFIRMED: {ref}")
+
+    # Send admin booking alert email
+    try:
+        from services.email_service import send_admin_booking_alert
+        admin_email = context.get("partner_email")
+        logger.info(f"📧 Sending package booking email to: {admin_email}")
+        booking_details = {
+            "package_name":         pkg_name,
+            "package_id":           ref,
+            "package_price":        final_str,
+            "per_person_price":     pd.get("per_person_price", "N/A"),
+            "travel_dates":         context.get("check_in", "Not specified"),
+            "travellers":           context.get("guests", "Not specified"),
+            "destinations":         context.get("destination", "Not specified"),
+            # Rich price breakdown
+            "nights":               pd.get("nights", "N/A"),
+            "hotel_costs":          pd.get("hotel_costs", []),
+            "total_hotel_price":    pd.get("total_hotel_price", 0),
+            "meal_total":           pd.get("total_map_price", 0),
+            "vehicle_name":         pd.get("vehicle_name", "N/A"),
+            "vehicle_price":        pd.get("vehicle_price", 0),
+            "total_embedded_price": pd.get("total_embedded_price", 0),
+            "package_margin":       pd.get("package_margin", 0),
+            "subtotal":             total_price,
+            "tax_rate":             tax_rate,
+            "tax_amount":           tax_amount,
+            "grand_total":          final_total,
+        }
+        send_admin_booking_alert(
+            booking_details=booking_details,
+            customer_phone=phone,
+            admin_email=admin_email,
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to send package booking email: {e}")
 
     context["step"] = "pkg_post_booking"
     save_context(state, context)

@@ -229,6 +229,82 @@ def emit_new_message(user_phone, message_data, display_phone_number):
 app.emit_new_message = emit_new_message
 
 
+# ── AUTO TEMPLATE HELPER ──────────────────────────────────────────────────────
+
+def _ensure_template_for_number(phone_number_id: str, waba_id: str):
+    """
+    Called automatically when Meta fires a registration/update event for a
+    phone number. Ensures this number has a welcome template:
+      1. DB already has mapping  → do nothing (already set up)
+      2. DB miss + Meta has real custom template → reuse it, save to DB
+      3. DB miss + Meta has no custom template   → create new, save to DB
+    This runs in the webhook handler so it must never raise — all errors logged.
+    """
+    try:
+        from database.database import (
+            get_template_mapping, save_template_mapping,
+            get_next_template_index, save_waba_id,
+        )
+        from services.meta_templates import (
+            find_any_welcome_template, create_welcome_template, DEFAULT_BODY,
+        )
+
+        # Always persist waba_id — may not be stored yet for brand-new numbers
+        if waba_id:
+            save_waba_id(phone_number_id, waba_id)
+
+        # ── Step 1: DB cache hit → nothing to do ─────────────────────────────
+        existing_mapping = get_template_mapping(phone_number_id)
+        if existing_mapping:
+            mapped_name = existing_mapping.get("template_name", "")
+            # If DB points to hello_world (Meta default), ignore — create real template
+            if mapped_name in ("hello_world",):
+                logger.info(
+                    f"⏭️  DB mapping for {phone_number_id} is '{mapped_name}' "
+                    f"(Meta default) — will create a real template instead"
+                )
+            else:
+                logger.info(
+                    f"✅ Template already mapped for {phone_number_id}: "
+                    f"'{mapped_name}' — skipping creation"
+                )
+                return
+
+        # ── Step 2: Scan Meta for any existing real template ─────────────────
+        existing_template = find_any_welcome_template(waba_id)
+        if existing_template:
+            template_name = existing_template.get("name")
+            status        = existing_template.get("status", "UNKNOWN")
+            body_text     = DEFAULT_BODY
+            for component in existing_template.get("components", []):
+                if component.get("type") == "BODY":
+                    body_text = component.get("text", DEFAULT_BODY)
+                    break
+            save_template_mapping(phone_number_id, waba_id, template_name, status, body_text)
+            logger.info(
+                f"♻️  Reused existing Meta template '{template_name}' "
+                f"for new number {phone_number_id}"
+            )
+            return
+
+        # ── Step 3: No real template on Meta → create a fresh one ────────────
+        index         = get_next_template_index()
+        template_name = f"welcome_message_template_{index}"
+        logger.info(
+            f"🆕 Auto-creating template '{template_name}' "
+            f"for newly registered number {phone_number_id}"
+        )
+        create_welcome_template(waba_id, template_name)
+        save_template_mapping(phone_number_id, waba_id, template_name, "PENDING", DEFAULT_BODY)
+        logger.info(f"✅ Template '{template_name}' submitted and mapped to {phone_number_id}")
+
+    except Exception as e:
+        logger.error(
+            f"❌ _ensure_template_for_number error for {phone_number_id}: {e}",
+            exc_info=True,
+        )
+
+
 # ── CORS HEADERS ──────────────────────────────────────────────────────────────
 
 @app.before_request
@@ -297,6 +373,8 @@ def webhook():
 
         if 'entry' in data:
             for entry in data['entry']:
+                waba_id = entry.get('id')   # 🔥 NEW — WhatsApp Business Account ID
+
                 for change in entry.get('changes', []):
                     value = change.get('value', {})
 
@@ -306,6 +384,21 @@ def webhook():
                     if phone_number_id:
                         try:
                             config, is_new = save_or_update_whatsapp_number(phone_number_id)
+
+                            # 🔥 NEW — always sync waba_id (cheap, idempotent)
+                            if waba_id:
+                                from database.database import save_waba_id
+                                save_waba_id(phone_number_id, waba_id)
+
+                            # ── Ensure this number has a welcome template ─────
+                            # Called on EVERY message — returns instantly from DB
+                            # cache if template already exists. Only hits Meta API
+                            # the very first time a number has no template mapped.
+                            if waba_id:
+                                try:
+                                    _ensure_template_for_number(phone_number_id, waba_id)
+                                except Exception as te:
+                                    logger.error(f"❌ Template ensure error for {phone_number_id}: {te}")
 
                             if is_new:
                                 logger.info(f"📱 New number: {phone_number_id}")
@@ -349,6 +442,28 @@ def webhook():
                             )
                         except Exception as e:
                             logger.error(f"❌ Queue enqueue error for {phone}: {e}")
+
+                    # ── Auto-create template on number registration events ────
+                    # Meta fires these fields when a number is added/registered:
+                    #   • phone_number_quality_update — number status changes
+                    #   • account_update             — account verified/banned etc.
+                    # phone_number_id comes from value directly for these events.
+                    field = change.get('field', '')
+                    if field in ('phone_number_quality_update', 'account_update'):
+                        event_phone_id = value.get('phone_number_id') or phone_number_id
+                        if event_phone_id and waba_id:
+                            logger.info(
+                                f"📲 Number registration event detected "
+                                f"(field='{field}') for {event_phone_id} — "
+                                f"ensuring template exists"
+                            )
+                            try:
+                                _ensure_template_for_number(event_phone_id, waba_id)
+                            except Exception as e:
+                                logger.error(
+                                    f"❌ Auto template creation failed for "
+                                    f"{event_phone_id}: {e}"
+                                )
 
     except Exception as e:
         # FIX: ALWAYS return 200 even if we crash — WhatsApp must not retry

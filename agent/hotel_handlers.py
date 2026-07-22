@@ -45,6 +45,11 @@ def proceed_to_categories(context: Dict, tools: TravelTools, state, execute_tool
     result = execute_tool_fn("get_categories", {}, tools)
     if result.get("success"):
         context["categories_from_api"] = result.get("categories", [])
+        # Store partner email from API user object into context
+        partner_email = result.get("partner_email", "")
+        if partner_email and not context.get("partner_email"):
+            context["partner_email"] = partner_email
+            logger.info(f"📧 Stored partner_email from hotel categories API: {partner_email}")
         context["step"] = "show_categories"
         save_context(state, context)
         return format_categories(context)
@@ -67,6 +72,11 @@ def handle_view_rooms(hotel_name: str, context: Dict, tools: TravelTools, state,
         context["hotel_tax"]      = result.get("tax", "0")
         context["step"]           = "show_rooms"
         context["rooms_page"] = 0
+        # Store partner email from hotel rooms API if not already set
+        partner_email = result.get("partner_email", "")
+        if partner_email and not context.get("partner_email"):
+            context["partner_email"] = partner_email
+            logger.info(f"📧 Stored partner_email from hotel rooms API: {partner_email}")
         save_context(state, context)
         return format_rooms(context)
 
@@ -171,14 +181,45 @@ def confirm_hotel_booking(context: Dict, phone: str, business_phone: str, state,
     ref = f"HOTEL{datetime.now().strftime('%Y%m%d%H%M%S')}"
     logger.info(f"✅ HOTEL BOOKING CONFIRMED: {ref}")
 
+    pd          = context.get("price_details", {})
+    meal_d      = context.get("meal_details", {})
+    room_data   = context.get("selected_room_data", {})
+
+    # Price breakdown
+    room_total      = pd.get("room_total", 0)
+    extra_total     = pd.get("extra_total", 0)
+    meal_total      = meal_d.get("total_meal_price", 0)
+    subtotal        = room_total + extra_total + meal_total
+    tax_rate        = float(str(context.get("hotel_tax", "0")).replace("%", "") or 0)
+    tax_amount      = round(subtotal * tax_rate / 100) if tax_rate > 0 else 0
+    grand_total     = subtotal + tax_amount
+
     booking_details = {
-        "package_name":     f"Hotel: {context.get('selected_hotel', 'N/A')}",
-        "package_id":       ref,
-        "package_price":    context.get("price_details", {}).get("grand_total", "N/A"),
-        "per_person_price": "N/A",
-        "travel_dates":     f"{context.get('check_in')} → {context.get('check_out')}",
-        "travellers":       context.get("guests", "N/A"),
-        "destinations":     context.get("destination", "N/A"),
+        "package_name":         f"Hotel: {context.get('selected_hotel', 'N/A')}",
+        "package_id":           ref,
+        "package_price":        f"Rs.{grand_total:,.0f}",
+        "per_person_price":     "N/A",
+        "travel_dates":         f"{context.get('check_in')} → {context.get('check_out')}",
+        "travellers":           context.get("guests", "N/A"),
+        "destinations":         context.get("destination", "N/A"),
+        # Rich hotel details
+        "hotel_name":           context.get("selected_hotel", "N/A"),
+        "hotel_category":       context.get("selected_category", "N/A"),
+        "room_category":        room_data.get("category", "N/A"),
+        "room_type":            room_data.get("type", "N/A"),
+        "nights":               pd.get("nights", "N/A"),
+        "rooms_needed":         pd.get("rooms_needed", 1),
+        "price_per_night":      pd.get("price_per_night_per_room", 0),
+        "season_used":          pd.get("season_used", "Regular Rate"),
+        "extra_people":         pd.get("extra_people", 0),
+        "extra_total":          extra_total,
+        "room_total":           room_total,
+        "meal_plan":            meal_d.get("meal_name", context.get("meal_plan", "N/A")),
+        "meal_total":           meal_total,
+        "subtotal":             subtotal,
+        "tax_rate":             tax_rate,
+        "tax_amount":           tax_amount,
+        "grand_total":          grand_total,
     }
 
     admin_email = context.get("partner_email")
