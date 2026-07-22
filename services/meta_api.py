@@ -15,7 +15,6 @@ def get_whatsapp_number_metadata(phone_number_id, access_token):
             "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json"
         }
-        
         # Get basic phone number info
         response = requests.get(url, headers=headers, timeout=10)
         
