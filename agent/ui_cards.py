@@ -44,7 +44,6 @@ def fetch_company_name(business_phone: str) -> str:
         pass
     return "himmanav travel bot"
 
-
 from database.database import (
     get_whatsapp_config, get_waba_id,
     get_template_mapping, save_template_mapping, get_next_template_index,
