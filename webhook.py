@@ -292,6 +292,8 @@ def webhook():
 
         if 'entry' in data:
             for entry in data['entry']:
+                waba_id = entry.get('id')   # 🔥 NEW — WhatsApp Business Account ID
+
                 for change in entry.get('changes', []):
                     value = change.get('value', {})
 
@@ -301,6 +303,11 @@ def webhook():
                     if phone_number_id:
                         try:
                             config, is_new = save_or_update_whatsapp_number(phone_number_id)
+
+                            # 🔥 NEW — always sync waba_id (cheap, idempotent)
+                            if waba_id:
+                                from database.database import save_waba_id
+                                save_waba_id(phone_number_id, waba_id)
 
                             if is_new:
                                 logger.info(f"📱 New number: {phone_number_id}")

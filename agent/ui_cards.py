@@ -45,13 +45,58 @@ def fetch_company_name(business_phone: str) -> str:
     return "Travel Assistant"
 
 
+from database.database import (
+    get_whatsapp_config, get_waba_id,
+    get_template_mapping, save_template_mapping, get_next_template_index,
+)
+from services.meta_templates import (
+    get_welcome_template, create_welcome_template, DEFAULT_BODY,
+)
+
+
+def fetch_welcome_text(business_phone: str, company_name: str) -> str:
+    """
+    Each account (phone_number_id) gets its OWN uniquely-numbered template:
+    welcome_message_template_0, _1, _2 ... _100, _101, and so on.
+    Assigned once, cached forever per account — no repeat creation.
+    """
+    phone_number_id = None
+    try:
+        config = get_whatsapp_config(business_phone)
+        phone_number_id = config.get("phone_number_id") if config else None
+    except Exception:
+        pass
+
+    if not phone_number_id:
+        return DEFAULT_BODY.replace("{{1}}", company_name).replace("{{2}}", company_name)
+    mapping = get_template_mapping(phone_number_id)
+    if mapping:
+        body = mapping.get("body_text", DEFAULT_BODY)
+        return body.replace("{{1}}", company_name).replace("{{2}}", company_name)
+
+    waba_id = get_waba_id(phone_number_id)
+    if not waba_id:
+        return DEFAULT_BODY.replace("{{1}}", company_name).replace("{{2}}", company_name)
+
+
+    index = get_next_template_index()
+    template_name = f"welcome_message_template_{index}"
+
+    remote = get_welcome_template(waba_id, template_name)
+    if not remote:
+        create_welcome_template(waba_id, template_name)   
+        status = "PENDING"
+    else:
+        status = remote.get("status", "PENDING")
+
+    save_template_mapping(phone_number_id, waba_id, template_name, status, DEFAULT_BODY)
+
+    return DEFAULT_BODY.replace("{{1}}", company_name).replace("{{2}}", company_name)
+
+
 def card_welcome(business_phone: str = "919816440734") -> Dict:
     company_name = fetch_company_name(business_phone)
-    content = (
-        f"Welcome to *{company_name}* \n\n"
-        f"I'm your personal travel assistant from *{company_name}*.\n\n"
-        "How can I help you today?"
-    )
+    content = fetch_welcome_text(business_phone, company_name)
     return {
         "type": "buttons",
         "content": content,
