@@ -45,6 +45,39 @@ def get_welcome_template(waba_id: str, template_name: str):
     return None
 
 
+def find_any_welcome_template(waba_id: str):
+    """
+    Scan ALL templates on Meta for this WABA and return the first REAL custom
+    template found — explicitly skipping 'hello_world' which is Meta's default
+    template that exists in every single WhatsApp Business account and is NOT
+    a usable welcome template for this chatbot.
+
+    Returns the template dict if a real custom template is found, or None if
+    the WABA has no custom templates yet (only hello_world or nothing).
+    """
+    # Names to always skip — Meta defaults that exist in every account
+    SKIP_TEMPLATES = {"hello_world"}
+
+    try:
+        all_templates = list_templates(waba_id)
+        for t in all_templates:
+            name = t.get("name", "")
+            if name in SKIP_TEMPLATES:
+                logger.info(f"⏭️  Skipping default Meta template '{name}' — not a custom template")
+                continue
+            # Found a real custom template — reuse it
+            logger.info(
+                f"✅ Existing custom template found — reusing '{name}' "
+                f"(status={t.get('status')}, category={t.get('category')}) "
+                f"for WABA {waba_id}"
+            )
+            return t
+        logger.info(f"ℹ️  No custom template found on Meta for WABA {waba_id} (only defaults). Will create new.")
+    except Exception as e:
+        logger.error(f"❌ find_any_welcome_template error: {e}")
+    return None
+
+
 def create_welcome_template(waba_id: str, template_name: str):
     """
     Submit a uniquely-named welcome template (e.g. welcome_message_template_5).
@@ -59,7 +92,7 @@ def create_welcome_template(waba_id: str, template_name: str):
     payload = {
         "name": template_name,
         "language": TEMPLATE_LANGUAGE,
-        "category": "UTILITY",
+        "category": "MARKETING",
         "components": [
             {
                 "type": "BODY",

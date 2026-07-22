@@ -33,7 +33,7 @@ PAGE_SIZE    = 3
 
 
 def fetch_company_name(business_phone: str) -> str:
-    """Fetch company name from the about-us API. Falls back to 'Travel Assistant' on error."""
+    """Fetch company name from the about-us API. Falls back to 'himmanav travel bot' on error."""
     try:
         url = f"{WP_API_BASE}/about-us?phone={business_phone}"
         response = requests.get(url, timeout=5)
@@ -42,7 +42,7 @@ def fetch_company_name(business_phone: str) -> str:
             return data["about_us"]["company_name"]
     except Exception:
         pass
-    return "Travel Assistant"
+    return "himmanav travel bot"
 
 
 from database.database import (
@@ -56,10 +56,29 @@ from services.meta_templates import (
 
 def fetch_welcome_text(business_phone: str, company_name: str) -> str:
     """
-    Each account (phone_number_id) gets its OWN uniquely-numbered template:
-    welcome_message_template_0, _1, _2 ... _100, _101, and so on.
-    Assigned once, cached forever per account — no repeat creation.
+    Each account (phone_number_id) gets its OWN uniquely-numbered template.
+    Assigned once, cached in DB forever.
+
+    hello_world is Meta's system default present in every account — it is
+    NEVER treated as a valid custom template. If found in DB or on Meta,
+    a real MARKETING template is created instead.
+
+    Status logic:
+    - PENDING  → show plain fallback text, re-check Meta on each call.
+    - APPROVED → show real approved template body.
     """
+    # Templates to always skip — Meta system defaults
+    SKIP_TEMPLATES = {"hello_world"}
+
+    # Template to show while Meta template is PENDING (not yet approved).
+    # Uses DEFAULT_BODY — the same Python template used when creating on Meta,
+    # with {{1}} and {{2}} already replaced with the real company name.
+    DEFAULT_BODY_TEXT = (
+        DEFAULT_BODY
+        .replace("{{1}}", company_name)
+        .replace("{{2}}", company_name)
+    )
+
     phone_number_id = None
     try:
         config = get_whatsapp_config(business_phone)
@@ -68,33 +87,95 @@ def fetch_welcome_text(business_phone: str, company_name: str) -> str:
         pass
 
     if not phone_number_id:
-        return DEFAULT_BODY.replace("{{1}}", company_name).replace("{{2}}", company_name)
+        return DEFAULT_BODY_TEXT
+
+    # ── Step 1: DB cache hit ─────────────────────────────────────────────────────
     mapping = get_template_mapping(phone_number_id)
     if mapping:
-        body = mapping.get("body_text", DEFAULT_BODY)
-        return body.replace("{{1}}", company_name).replace("{{2}}", company_name)
+        template_name = mapping.get("template_name", "")
 
+        # If DB mapped to hello_world (Meta default) — ignore and create a real one
+        if template_name in SKIP_TEMPLATES:
+            import logging
+            logging.getLogger(__name__).info(
+                f"⏭️  DB mapping for {phone_number_id} is '{template_name}' "
+                f"(Meta default) — ignoring, will create real template"
+            )
+            mapping = None  # fall through to Steps 2 / 3
+
+    if mapping:
+        status = mapping.get("status", "PENDING")
+        template_name = mapping.get("template_name", "")
+
+        # If not yet APPROVED → ping Meta to check for status change
+        if status != "APPROVED":
+            waba_id_cached = mapping.get("waba_id") or get_waba_id(phone_number_id)
+            if waba_id_cached and template_name:
+                try:
+                    remote = get_welcome_template(waba_id_cached, template_name)
+                    if remote:
+                        new_status = remote.get("status", status)
+                        if new_status != status:
+                            body_text = DEFAULT_BODY
+                            for component in remote.get("components", []):
+                                if component.get("type") == "BODY":
+                                    body_text = component.get("text", DEFAULT_BODY)
+                                    break
+                            save_template_mapping(
+                                phone_number_id, waba_id_cached,
+                                template_name, new_status, body_text,
+                            )
+                            mapping["status"]    = new_status
+                            mapping["body_text"] = body_text
+                            status               = new_status
+                            import logging
+                            logging.getLogger(__name__).info(
+                                f"🔄 Template '{template_name}' → {new_status} for {phone_number_id}"
+                            )
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        f"⚠️ Could not refresh template status: {e}"
+                    )
+
+        if status == "APPROVED":
+            body = mapping.get("body_text", DEFAULT_BODY)
+            return body.replace("{{1}}", company_name).replace("{{2}}", company_name)
+
+        # PENDING / REJECTED — use DEFAULT_BODY until Meta approves
+        return DEFAULT_BODY_TEXT
+
+    # ── No valid DB mapping ────────────────────────────────────────────────────
     waba_id = get_waba_id(phone_number_id)
     if not waba_id:
-        return DEFAULT_BODY.replace("{{1}}", company_name).replace("{{2}}", company_name)
+        return DEFAULT_BODY_TEXT
 
+    # ── Step 2: Scan Meta for any existing real custom template ──────────────────
+    # find_any_welcome_template() already skips hello_world internally
+    existing = find_any_welcome_template(waba_id)
+    if existing:
+        template_name = existing.get("name")
+        status        = existing.get("status", "UNKNOWN")
+        body_text     = DEFAULT_BODY
+        for component in existing.get("components", []):
+            if component.get("type") == "BODY":
+                body_text = component.get("text", DEFAULT_BODY)
+                break
+        save_template_mapping(phone_number_id, waba_id, template_name, status, body_text)
+        if status == "APPROVED":
+            return body_text.replace("{{1}}", company_name).replace("{{2}}", company_name)
+        return DEFAULT_BODY_TEXT  # found but not APPROVED yet
 
-    index = get_next_template_index()
+    # ── Step 3: Nothing real on Meta — create a fresh MARKETING template ───────
+    index         = get_next_template_index()
     template_name = f"welcome_message_template_{index}"
-
-    remote = get_welcome_template(waba_id, template_name)
-    if not remote:
-        create_welcome_template(waba_id, template_name)   
-        status = "PENDING"
-    else:
-        status = remote.get("status", "PENDING")
-
-    save_template_mapping(phone_number_id, waba_id, template_name, status, DEFAULT_BODY)
-
-    return DEFAULT_BODY.replace("{{1}}", company_name).replace("{{2}}", company_name)
+    create_welcome_template(waba_id, template_name)
+    save_template_mapping(phone_number_id, waba_id, template_name, "PENDING", DEFAULT_BODY)
+    return DEFAULT_BODY_TEXT  # newly created — use DEFAULT_BODY until Meta approves
 
 
-def card_welcome(business_phone: str = "919816440734") -> Dict:
+def card_welcome(business_phone: str) -> Dict:
+    """Build welcome card for the given business phone — company name fetched dynamically."""
     company_name = fetch_company_name(business_phone)
     content = fetch_welcome_text(business_phone, company_name)
     return {

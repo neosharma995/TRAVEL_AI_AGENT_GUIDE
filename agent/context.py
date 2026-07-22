@@ -89,13 +89,13 @@ def get_missing_field(context: Dict):
     return None
 
 
-def ask_for_field(field: str, context: Dict) -> Dict:
+def ask_for_field(field: str, context: Dict, business_phone: str = "") -> Dict:
     """Return the appropriate prompt message for the missing field."""
     from agent.ui_cards import card_welcome
     svc = context.get("service_type", "")
 
     if field == "service_type":
-        return card_welcome()
+        return card_welcome(business_phone)
 
     if field == "destination":
         if svc == "package":
